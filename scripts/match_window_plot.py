@@ -122,13 +122,13 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
             all_good_matches[k1, k2] = cur_good_matches
             new_x_1, new_y_1 = transform(rots[k1], trans_x[k1], trans_y[k1], (cur_good_matches[:, 0, 0], cur_good_matches[:, 0, 1]))
             new_x_2, new_y_2 = transform(rots[k2], trans_x[k2], trans_y[k2], (cur_good_matches[:, 1, 0], cur_good_matches[:, 1, 1]))
-            err = err + T.sqrt(T.sum(T.sqr(new_x_1 - new_x_2) + T.sqr(new_y_1 - new_y_2)))
+            err = err + T.sum(T.sqr(new_x_1 - new_x_2) + T.sqr(new_y_1 - new_y_2))
 
     args = [rots[k] for k in moving_tiles] + \
         [trans_x[k] for k in moving_tiles] + \
         [trans_y[k] for k in moving_tiles]
 
-    err = err / tot_matches
+    err = T.sqrt(err) / tot_matches
 
     errfun = function(args, err)
     errgrad = function(args, T.grad(err, args))
@@ -150,26 +150,46 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
                                       fprime=g,
                                       callback=callback,
                                       maxiter=5000,
+                                      full_output=True,
                                       disp=1)
 
 
-    rot_trans = best_w_b
-    rots = {k : i for k, i in zip(moving_tiles, rot_trans)}
-    trans_x = {k : i for k, i in zip(moving_tiles, rot_trans[len(moving_tiles):])}
-    trans_y = {k : i for k, i in zip(moving_tiles, rot_trans[2 * len(moving_tiles):])}
-    rots[fixed_tile] = 0
-    trans_x[fixed_tile] = 0
-    trans_y[fixed_tile] = 0
-    result = [{"tile" : k,
-               "rotation_rad" : rots[k] / 360,
-               "trans" : [trans_x[k], trans_y[k]]}
-              for k in tilenames]
-    return result
+    for idx, (err, rot_trans) in enumerate(intermediates):
+        print "writing", idx, len(intermediates)
+        pylab.figure(figsize=(8.0, 5.0))
+
+        rots = {k : i for k, i in zip(moving_tiles, rot_trans)}
+        trans_x = {k : i for k, i in zip(moving_tiles, rot_trans[len(moving_tiles):])}
+        trans_y = {k : i for k, i in zip(moving_tiles, rot_trans[2 * len(moving_tiles):])}
+        rots[fixed_tile] = 0
+        trans_x[fixed_tile] = 0
+        trans_y[fixed_tile] = 0
+        diffs = []
+        for (k1, k2), matches in all_good_matches.iteritems():
+            new_x_1, new_y_1 = transform_np(rots[k1], trans_x[k1], trans_y[k1], (matches[:, 0, 0], matches[:, 0, 1]))
+            new_x_2, new_y_2 = transform_np(rots[k2], trans_x[k2], trans_y[k2], (matches[:, 1, 0], matches[:, 1, 1]))
+            diffs = np.concatenate((diffs, np.sqrt((new_x_1 - new_x_2) ** 2 + (new_y_1 - new_y_2) ** 2)))
+            
+            for x1, y1, x2, y2 in zip(new_x_1, new_y_1, new_x_2, new_y_2):
+                pylab.plot([y1, y2], [x1, x2], 'k', lw=0.5)
+
+        pylab.title("L2 error: %0.3f\nmedian distance: %0.2f" % (err, np.median(diffs)))
+
+        pylab.axis('off')
+        if idx == 0:
+            pylab.axis('equal')
+            next_ax = pylab.axis()
+            print "next_ax", next_ax
+        else:
+            pylab.axis(next_ax)
+        pylab.savefig('frame_L2_05_%05d' % idx, dpi=300)
+        pylab.close()
+
+    ppl.plot(intermediates)
+    pylab.show()
+    return best_w_b
 
 
 if __name__ == '__main__':
     res = compute_alignments(sys.argv[1], sys.argv[2])
-    with open(sys.argv[3], "wb") as transforms:
-        json.dump(res, transforms,
-                  sort_keys=True,
-                  indent=4)
+
