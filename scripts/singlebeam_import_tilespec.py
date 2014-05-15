@@ -75,5 +75,5 @@ if __name__ == '__main__':
     for sub_folder in glob.glob(os.path.join(input_folder, 'Sec*')):
         if os.path.isdir(sub_folder):
             output_path = os.path.join(input_folder, os.path.basename(sub_folder) + '.json')
-            layer = int(sub_folder.split("Sec")[1])
+            layer = int(sub_folder.split("Sec")[-1])
             write_tilespec(sub_folder, output_path, layer)
