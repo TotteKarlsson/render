@@ -1,5 +1,5 @@
-
 import sys
+import numpy as np
 
 # bounding box - represents a bounding box in an image
 class BoundingBox:
@@ -40,6 +40,12 @@ class BoundingBox:
         return '{0} {1} {2} {3}'.format(self.from_x, self.to_x, self.from_y, self.to_y)
 
 
+    def union(self, other_bbox):
+        return BoundingBox(min(self.from_x, other_bbox.from_x),
+                           max(self.to_x, other_bbox.to_x),
+                           min(self.from_y, other_bbox.from_y),
+                           max(self.to_y, other_bbox.to_y))
+
     def intersect(self, other_bbox):
         return BoundingBox(max(self.from_x, other_bbox.from_x),
                            min(self.to_x, other_bbox.to_x),
@@ -48,8 +54,8 @@ class BoundingBox:
 
     def contains(self, pts):
         '''return a mask of points that are within the box.  pts.shape = (..., 2)'''
-        return ((pts[:, 0] > self.from_x) & (pts[:, 0] < self.to_x) &
-                (pts[:, 1] > self.from_y) & (pts[:, 1] < self.to_y))
+        return ((pts[:, 0] >= self.from_x) & (pts[:, 0] <= self.to_x) &
+                (pts[:, 1] >= self.from_y) & (pts[:, 1] <= self.to_y))
 
     def expand(self, scale=None, offset=None):
         assert (scale is not None) or (offset is not None)
@@ -64,3 +70,21 @@ class BoundingBox:
 
     def shape(self):
         return (abs(self.to_x - self.from_x), abs(self.to_y - self.from_y))
+
+    def transform(self, R, T):
+        s = np.sin(R)
+        c = np.cos(R)
+        M = np.array([[c, -s],
+                      [s, c]])
+        # yes, one can do this more directly, but this is less bug-prone
+        pts = np.array([[self.from_x, self.from_x, self.to_x, self.to_x],
+                        [self.from_y, self.to_y, self.from_y, self.to_y]])
+        trpts = np.dot(M, pts) + np.array(T).reshape((2, -1))
+
+        mn = trpts.min(axis=1)
+        mx = trpts.max(axis=1)
+        return BoundingBox(mn[0], mx[0], mn[1], mx[1])
+
+    def copy(self):
+        return BoundingBox(self.from_x, self.to_x,
+                           self.from_y, self.to_y)
