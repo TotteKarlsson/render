@@ -73,8 +73,7 @@ class Features(object):
         close_enough_features = (differences_1 < max_difference)
         close_enough_distance = (np.linalg.norm(self.locations - other.locations[match_indices_1, :], axis=1) < max_match_distance)
         good_matches = matches_1_index[unambiguous_1 & close_enough_features & close_enough_distance]
-        return ((self, good_matches),
-                (other, match_indices_1[good_matches]))
+        return good_matches, match_indices_1[good_matches]
 
     def update(self, other):
         self.locations = np.vstack((self.locations, other.locations))

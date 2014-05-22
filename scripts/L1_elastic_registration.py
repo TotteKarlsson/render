@@ -5,9 +5,8 @@ import itertools
 from functools import reduce
 import pylab as plt
 
-import theano.tensor as T
-from theano import function, scan, shared, pp, printing
 import scipy.optimize
+import scipy.sparse as sp
 
 from bounding_box import BoundingBox
 from features import Features
@@ -67,32 +66,16 @@ def load_and_transform(tilespec_file, feature_file, transform_file):
     return full_bbox, all_features
 
 
-def match_distances(features_1, features_2, grid_1, grid_2, max_distance=1500, fthresh=0.25):
+def match_distances(features_1, features_2, max_distance=1500, fthresh=0.25):
     features_1.bin(max_distance)
     features_2.bin(max_distance)
 
-    matches = features_1.match(features_2, max_difference=fthresh, max_match_distance=max_distance)
-    (_, idx1), (_, idx2) = matches
-    if len(idx1) == 0:
-        return [], 0
-
-    ptdists = []
-    warped_1 = grid_1.weighted_combination(features_1.locations[idx1, :])
-    warped_2 = grid_2.weighted_combination(features_2.locations[idx2, :])
-    
-
+    idx1, idx2 = features_1.match(features_2, max_difference=fthresh, max_match_distance=max_distance)
     orig_dists = np.sqrt(np.sum((features_1.locations[idx1, :] - features_2.locations[idx2, :]) ** 2, axis=1))
-
-    # assume pts come back as Nx2 arrays
-    # add eps to make perfect matches differentiable
-    return T.sqrt(T.sum(T.sqr(warped_1 - warped_2), axis=1) + eps), len(idx1), orig_dists
-
+    return idx1, idx2, orig_dists
 
 def weight(skip):
     return 1.25 ** -(abs(skip) - 1)
-
-def make_function(*args):
-    return function(*args, on_unused_input='ignore')
 
 
 if __name__ == '__main__':
@@ -103,85 +86,137 @@ if __name__ == '__main__':
     grid_size = (20, 30)
     stiffness = 1.0
 
-    num_slices = len(tile_files)
-    offsets_shape = [num_slices, 2, grid_size[0], grid_size[1]]
-    params = T.vector('params')
-    offsets = params.reshape(offsets_shape)
-
     transformed_bboxes, transformed_features = zip(*[load_and_transform(tf, ff, it)
                                                      for tf, ff, it in
                                                      zip(tile_files, feature_files, input_transforms)])
-    slnone = slice(None, None, None)
-    grids = [Grid(t, grid_size, offsets[idx, :, :, :])
-             for idx, t in enumerate(transformed_bboxes)]
+    grids = [Grid(t, grid_size) for t in transformed_bboxes]
+    num_slices = len(grids)
 
-    dists = []
-    orig_dists = []
-    error_terms = []
+    grid_offsets = np.prod(grid_size) * np.arange(len(grids), dtype=int)
+    feature_offsets = [0] + np.cumsum([f.size for f in transformed_features]).tolist()
+    num_features = np.sum([f.size for f in transformed_features])
+
+    # W takes grid points to feature points
+    W_shape = (np.sum(num_features), len(grids) * np.prod(grid_size))
+    W = sp.csr_matrix(W_shape)
+    for g, f, go, fo in zip(grids, transformed_features, grid_offsets, feature_offsets):
+        grid_idx, weights = g.weighted_combination(f.locations)
+        pt_idx = np.hstack([np.arange(weights.shape[0], dtype=int).reshape((-1, 1))] * 4)
+        W = W + sp.csr_matrix((weights.ravel(), (fo + pt_idx.ravel(), go + grid_idx.ravel())), shape=W_shape)
+    in_grid = np.vstack([g.grid for g in grids])
+    outpts = W * in_grid
+
+    # test reconstruction error
+    for f, fo in zip(transformed_features, feature_offsets):
+        sub = outpts[fo:fo+f.locations.shape[0], :]
+        assert np.max(np.abs(f.locations - sub)) < 0.01
+
+    # build links between features
+    print "linking"
     total_matches = 0
-    for idx1, idx2 in itertools.combinations(range(num_slices), 2):
-        curdists, match_count, orig = match_distances(transformed_features[idx1], transformed_features[idx2],
-                                                grids[idx1], grids[idx2])
-        total_matches += match_count
-        print "    matching", idx1, idx2, match_count
-        dists.append(curdists)
-        orig_dists.append(orig)
-        error_terms.append(T.sum(weight(idx1 - idx2) * T.sum(curdists)))
+    link_idx1 = []
+    link_idx2 = []
+    desired_distances = []
+    weights = []
+    orig_dists = []
+    for sl_idx1, sl_idx2 in itertools.combinations(range(num_slices), 2):
+        pt_idx1, pt_idx2, curdists = match_distances(transformed_features[sl_idx1], transformed_features[sl_idx2])
+        orig_dists.append(curdists)
+        link_idx1.append(pt_idx1 + feature_offsets[sl_idx1])
+        link_idx2.append(pt_idx2 + feature_offsets[sl_idx2])
+        total_matches += pt_idx1.size
+        desired_distances.append(np.zeros(pt_idx1.size))
+        weights.append(weight(sl_idx1 - sl_idx2) * np.ones(pt_idx1.size))
 
-    dists = T.concatenate(dists)
+    # build structural links
+    print "structure"
+    structural_W = sp.eye(len(grids) * np.prod(grid_size))  # weight matrix for grid points taken to themselves
+    structure_links = [g.structural() for g in grids]
+    # all structural points will be after feature points
+    for (idx1, idx2, _), go in zip(structure_links, grid_offsets):
+        idx1 += go + W_shape[0]
+        idx2 += go + W_shape[0]
+
+    W = sp.vstack((W, structural_W))
+
+    # build point selection matrices
+    structural_indices_1, structural_indices_2, structural_dists = zip(*structure_links)
+    indices_a = np.concatenate([idx.ravel() for idx in link_idx1] + [idx.ravel() for idx in structural_indices_1])
+    indices_b = np.concatenate([idx.ravel() for idx in link_idx2] + [idx.ravel() for idx in structural_indices_2])
+
+    num_links = indices_a.size
+    Pa = sp.csr_matrix((np.ones(num_links), (range(num_links), indices_a)), shape=(num_links, W.shape[0]))
+    Pb = sp.csr_matrix((np.ones(num_links), (range(num_links), indices_b)), shape=(num_links, W.shape[0]))
+
+    # M takes grids to deltas
+    M = (Pa - Pb) * W
+
+    deltas = M * in_grid
+    deltas = np.sqrt(np.sum(deltas ** 2, axis=1))
     orig_dists = np.concatenate(orig_dists)
-    error = T.sum(error_terms) / total_matches
-    st = stiffness * T.sum([T.sum(g.structural()) for g in grids]) / len(grids)
-    error = error + st
-
-    v = T.vector('v')
-    errgrad = T.grad(error, params)
-    vH = T.grad(T.sum(errgrad * v), params)
-
-    distfun = make_function([params], dists)
-    errfun = make_function([params], error)
-    errgradfun = make_function([params], errgrad)
-    errhesspfun = make_function([params, v], vH)
-    posfun = make_function([params], grids[3].grid)
-
-    params_size = np.prod(offsets_shape)
-
-    print "START", np.median(orig_dists), np.median(distfun(np.zeros(params_size, np.float32)))
+    structural_dists = np.concatenate(structural_dists)
+    Dpts = deltas[:orig_dists.size]
+    print "diff between linked", np.max(np.abs(orig_dists - Dpts))
+    Spts = deltas[orig_dists.size:]
+    print "diff between structural", np.max(np.abs(structural_dists - Spts))
 
 
-    plt.ion()
-    plt.figure(figsize=(8, 5))
-    plt.show()
+    weights_links = np.concatenate(weights) / total_matches
+    num_structural = sum(s.size for s in structural_indices_1)
+    weight_structural = stiffness * np.ones(num_structural) / num_structural
 
-    def f(x):
-        return errfun(x.astype(np.float32))
+    desired_lengths = np.concatenate([np.zeros(total_matches), structural_dists]).reshape((-1, 1))
+    weights = np.concatenate([weights_links, weight_structural]).reshape((-1, 1))
 
-    def g(x):
-        return errgradfun(x.astype(np.float32))
+    def err(offset):
+        AB = M * (in_grid + offset.reshape(in_grid.shape))
+        lens = np.sqrt((AB ** 2).sum(axis=1)).reshape((-1, 1))
+        errs = np.abs(lens - desired_lengths)
+        return np.sum(errs * weights)
 
-    def hv(x, v):
-        return errhesspfun(x.astype(np.float32), v.astype(np.float32))
+    def err_gradient(offset):
+        AB = M * (in_grid + offset.reshape(in_grid.shape))
+        lens = np.sqrt((AB ** 2).sum(axis=1)).reshape((-1, 1))
+        sL = np.sign(lens - desired_lengths)
+        lens[lens == 0] = eps
+        gXY = M.T * (sL * AB * weights / lens)
+        return gXY.ravel()
+
+    def err_hessp(offset, v):
+        e = 0.00001 / (abs(v).max() + eps)
+        g0 = err_gradient(offset + e * v)
+        g1 = err_gradient(offset - e * v)
+        return (g0 - g1) / (2 * e)
+
+    if False:
+        print "err"
+        err0 = r(np.zeros(in_grid.size))
+        print "ERR", err0
+        gr = err_gradient(np.zeros(in_grid.size))
+        sp = np.zeros(in_grid.size)
+        dd = np.zeros(in_grid.size)
+        for idx in range(in_grid.size):
+            sp[idx] = 0.0000001
+            dd[idx] = (err(sp) - err(-sp)) / (2 * 0.0000001)
+            sp[idx] = 0
+        print "max", np.max(abs(dd - gr)), np.median(abs(dd))
 
     def callback(x):
-        err = errfun(x.astype(np.float32))
-        gnorm = np.linalg.norm(errgradfun(x.astype(np.float32)))
-        pos = posfun(x.astype(np.float32))
-        xpos = pos[0, :, :].ravel()
-        ypos = pos[1, :, :].ravel()
-        width = np.ptp(xpos)
-        height = np.ptp(ypos)
-        med = np.median(distfun(x.astype(np.float32)))
-        print "error: %0.2f     median_dist: %0.2f  gnorm: %0.4f  wh: %0.2f %0.2f %0.2f" % \
-            (err, med, gnorm, width, height, width*height)
-        plt.cla()
-        plt.plot(ypos, xpos, '.')
-        plt.axis('tight')
-        plt.draw()
+        E = err(x)
+        gnorm = np.linalg.norm(err_gradient(x))
+        AB = M * (in_grid + x.reshape(in_grid.shape))
+        lens = np.sqrt((AB ** 2).sum(axis=1)).reshape((-1, 1))
+        med = np.median(lens[:total_matches])
+        print "error: %0.2f     median_dist: %0.2f  gnorm: %0.4f" % (E, med, gnorm),
+        print np.linalg.norm(x)
 
-best_w_b = scipy.optimize.fmin_ncg(f=f,
-                                      x0=np.zeros(params_size),
-                                   fprime=g,
-                                   fhess_p=hv,
-                                      callback=callback,
-                                      maxiter=5000,
-                                      disp=False)
+    best_w_b = np.zeros(in_grid.size)
+    print best_w_b.shape
+    while True:
+        best_w_b = scipy.optimize.fmin_cg(f=err,
+                                          x0=best_w_b,
+                                          fprime=err_gradient,
+                                          #fhess_p=err_hessp,
+                                          callback=callback,
+                                          maxiter=1000,
+                                          disp=False)

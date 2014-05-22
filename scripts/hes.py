@@ -59,16 +59,15 @@ def gradient_err_divided(step):
     return grad
 
 def gradient_err():
-    A = PaW * G
-    B = PbW * G
-    lens = np.sqrt(((A - B) ** 2).sum(axis = 1)).reshape((-1, 1))
+    AB = M * G
+    lens = np.sqrt(((AB) ** 2).sum(axis = 1)).reshape((-1, 1))
     sL = np.sign(lens - L)
     print sL.dtype
     lens[lens == 0] = eps
 
     # maximum increase for point A is along the B->A vector if current length
     # is greater than desired length
-    gXY = M.T * (sL * (A - B) / lens)
+    gXY = M.T * (sL * (AB) / lens)
 
     # slightly more verbose:
     # grad_A = sL * AB / lens
