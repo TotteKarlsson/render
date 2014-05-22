@@ -79,12 +79,18 @@ def weight(skip):
 
 
 if __name__ == '__main__':
+    if False:  # truncate
+        sys.argv = sys.argv[:13]
+
     tile_files = sys.argv[1::4]
     feature_files = sys.argv[2::4]
     montage_transforms = sys.argv[3::4]
     input_transforms = sys.argv[4::4]
+
+    print len(tile_files), "tiles to be processed"
+
     grid_size = (20, 30)
-    stiffness = 1.0
+    stiffness = 0.1
 
     transformed_bboxes, transformed_features = zip(*[load_and_transform(tf, ff, it)
                                                      for tf, ff, it in
@@ -166,20 +172,22 @@ if __name__ == '__main__':
     weight_structural = stiffness * np.ones(num_structural) / num_structural
 
     desired_lengths = np.concatenate([np.zeros(total_matches), structural_dists]).reshape((-1, 1))
+    # add a smoother
+    desired_lengths = np.sqrt(desired_lengths**2 + 1)
     weights = np.concatenate([weights_links, weight_structural]).reshape((-1, 1))
 
     def err(offset):
         AB = M * (in_grid + offset.reshape(in_grid.shape))
-        lens = np.sqrt((AB ** 2).sum(axis=1)).reshape((-1, 1))
-        errs = np.abs(lens - desired_lengths)
-        return np.sum(errs * weights)
+        lens = np.sqrt((AB ** 2).sum(axis=1) + 1).reshape((-1, 1))
+        errs = np.sqrt((lens - desired_lengths)**2 + 1)
+        return np.sum(errs * weights) - np.sum(weights)  # minimum at 0
 
     def err_gradient(offset):
         AB = M * (in_grid + offset.reshape(in_grid.shape))
-        lens = np.sqrt((AB ** 2).sum(axis=1)).reshape((-1, 1))
-        sL = np.sign(lens - desired_lengths)
-        lens[lens == 0] = eps
-        gXY = M.T * (sL * AB * weights / lens)
+        lens = np.sqrt((AB ** 2).sum(axis=1) + 1).reshape((-1, 1))
+        delta_lens = (lens - desired_lengths)
+        dAB = AB * (lens - desired_lengths) / (lens * np.sqrt(delta_lens**2 + 1))
+        gXY = M.T * (dAB * weights)
         return gXY.ravel()
 
     def err_hessp(offset, v):
@@ -190,7 +198,7 @@ if __name__ == '__main__':
 
     if False:
         print "err"
-        err0 = r(np.zeros(in_grid.size))
+        err0 = err(np.zeros(in_grid.size))
         print "ERR", err0
         gr = err_gradient(np.zeros(in_grid.size))
         sp = np.zeros(in_grid.size)
@@ -213,10 +221,11 @@ if __name__ == '__main__':
     best_w_b = np.zeros(in_grid.size)
     print best_w_b.shape
     while True:
-        best_w_b = scipy.optimize.fmin_cg(f=err,
+        print "iter"
+        best_w_b = scipy.optimize.fmin_bfgs(f=err,
                                           x0=best_w_b,
                                           fprime=err_gradient,
                                           #fhess_p=err_hessp,
                                           callback=callback,
-                                          maxiter=1000,
+                                          maxiter=100,
                                           disp=False)
