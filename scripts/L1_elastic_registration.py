@@ -5,6 +5,8 @@ import itertools
 from functools import reduce
 import pylab as plt
 
+from hesfree import hessian_free
+
 import scipy.optimize
 import scipy.sparse as sp
 
@@ -90,7 +92,7 @@ if __name__ == '__main__':
     print len(tile_files), "tiles to be processed"
 
     grid_size = (20, 30)
-    stiffness = 0.1
+    stiffness = 1.0
 
     transformed_bboxes, transformed_features = zip(*[load_and_transform(tf, ff, it)
                                                      for tf, ff, it in
@@ -126,13 +128,14 @@ if __name__ == '__main__':
     weights = []
     orig_dists = []
     for sl_idx1, sl_idx2 in itertools.combinations(range(num_slices), 2):
-        pt_idx1, pt_idx2, curdists = match_distances(transformed_features[sl_idx1], transformed_features[sl_idx2])
-        orig_dists.append(curdists)
-        link_idx1.append(pt_idx1 + feature_offsets[sl_idx1])
-        link_idx2.append(pt_idx2 + feature_offsets[sl_idx2])
-        total_matches += pt_idx1.size
-        desired_distances.append(np.zeros(pt_idx1.size))
-        weights.append(weight(sl_idx1 - sl_idx2) * np.ones(pt_idx1.size))
+        if abs(sl_idx1 - sl_idx2) <= 5:
+            pt_idx1, pt_idx2, curdists = match_distances(transformed_features[sl_idx1], transformed_features[sl_idx2])
+            orig_dists.append(curdists)
+            link_idx1.append(pt_idx1 + feature_offsets[sl_idx1])
+            link_idx2.append(pt_idx2 + feature_offsets[sl_idx2])
+            total_matches += pt_idx1.size
+            desired_distances.append(np.zeros(pt_idx1.size))
+            weights.append(weight(sl_idx1 - sl_idx2) * np.ones(pt_idx1.size))
 
     # build structural links
     print "structure"
@@ -186,15 +189,34 @@ if __name__ == '__main__':
         AB = M * (in_grid + offset.reshape(in_grid.shape))
         lens = np.sqrt((AB ** 2).sum(axis=1) + 1).reshape((-1, 1))
         delta_lens = (lens - desired_lengths)
-        dAB = AB * (lens - desired_lengths) / (lens * np.sqrt(delta_lens**2 + 1))
+        dAB = (AB / lens) * (delta_lens / np.sqrt(delta_lens**2 + 1))
         gXY = M.T * (dAB * weights)
         return gXY.ravel()
 
+
     def err_hessp(offset, v):
-        e = 0.00001 / (abs(v).max() + eps)
-        g0 = err_gradient(offset + e * v)
-        g1 = err_gradient(offset - e * v)
-        return (g0 - g1) / (2 * e)
+        # compute as d(gradient(G + e * v)) / de at e == 0
+        AB = M * (in_grid + offset.reshape(in_grid.shape))
+        Mv = M * v.reshape(in_grid.shape)
+        # dAB / de = Mv
+
+        lens = np.sqrt((AB ** 2).sum(axis = 1) + 1).reshape((-1, 1))
+        normed_AB = AB / lens
+
+        # d [sqrt(x**2 + y**2  + 1)] / dx = x / sqrt(x**2 + y**2  + 1)
+        d_lens_de = (Mv * normed_AB).sum(axis=1).reshape((-1, 1))
+        # quotient rule
+        d_NAB_de = ((lens * Mv) - (AB * d_lens_de)) / lens**2
+
+        delta_lens = (lens - desired_lengths)
+        normed_delta_lens = delta_lens / np.sqrt(delta_lens**2 + 1)
+        # d delta_lens / de = d lens / de
+        # d normed_delta_lens / de = (1 / (np.sqrt(delta_lens**2 + 1))**3) * (d delta_lens / de)
+        d_NDL_de = d_lens_de / np.sqrt(delta_lens**2 + 1)**3
+
+        d_AB_de = normed_AB * (d_NDL_de) + normed_delta_lens * d_NAB_de
+        return (M.T * (d_AB_de * weights)).ravel()
+
 
     if False:
         print "err"
@@ -218,14 +240,21 @@ if __name__ == '__main__':
         print "error: %0.2f     median_dist: %0.2f  gnorm: %0.4f" % (E, med, gnorm),
         print np.linalg.norm(x)
 
-    best_w_b = np.zeros(in_grid.size)
-    print best_w_b.shape
-    while True:
-        print "iter"
-        best_w_b = scipy.optimize.fmin_bfgs(f=err,
-                                          x0=best_w_b,
-                                          fprime=err_gradient,
-                                          #fhess_p=err_hessp,
-                                          callback=callback,
-                                          maxiter=100,
-                                          disp=False)
+    best_offset = hessian_free(f=err,
+                               x0=np.zeros(in_grid.size),
+                               fprime=err_gradient,
+                               fhessp=err_hessp,
+                               callback=callback,
+                               maxiter=100)
+
+
+import pylab
+out_grid = in_grid + best_offset.reshape(in_grid.shape)
+grid3 = out_grid[grid_offsets[3]:grid_offsets[4], :]
+pylab.plot(grid3[:, 1], grid3[:, 0], '.')
+pylab.figure()
+base = in_grid[grid_offsets[3]:grid_offsets[4], :]
+offsets = best_offset.reshape(in_grid.shape)[grid_offsets[3]:grid_offsets[4], :]
+pylab.quiver(base[:, 1], base[:, 0], offsets[:, 1], offsets[:, 0])
+pylab.show()
+

@@ -107,12 +107,13 @@ if __name__ == '__main__':
     error_terms = []
     total_matches = 0
     for idx1, idx2 in itertools.combinations(range(len(feature_trees)), 2):
-        curdists, match_count = match_distances(feature_trees[idx1], feature_trees[idx2],
-                                                transforms[idx1], transforms[idx2])
-        total_matches += match_count
-        print "    matching", idx1, idx2, match_count
-        dists.append(curdists)
-        error_terms.append(T.sum(weight(idx1 - idx2) * T.sum(curdists)))
+        if abs(sl_idx1 - sl_idx2) <= 5:
+            curdists, match_count = match_distances(feature_trees[idx1], feature_trees[idx2],
+                                                    transforms[idx1], transforms[idx2])
+            total_matches += match_count
+            print "    matching", idx1, idx2, match_count
+            dists.append(curdists)
+            error_terms.append(T.sum(weight(idx1 - idx2) * T.sum(curdists)))
 
     args = [arg for t in transforms for arg in t.args()]
     dists = T.concatenate(dists)
