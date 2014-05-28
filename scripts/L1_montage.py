@@ -1,14 +1,12 @@
 import sys
 import json
 from bounding_box import BoundingBox
-import pylab
 import numpy as np
 import itertools
 from scipy.spatial.distance import cdist
 from scipy.stats import norm
 from weighted_ransac import weighted_ransac
 from collections import defaultdict
-import prettyplotlib as ppl
 import scipy.optimize
 
 import L1_mosaic_derivs
@@ -41,12 +39,11 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     features = {fs["mipmapLevels"]["0"]["imageUrl"] : fs["mipmapLevels"]["0"]["featureList"] for fs in load_features(feature_file)}
     assert set(bboxes.keys()) == set(features.keys())
 
-    # XXX - needed?
     for k in bboxes:
         features[k] = extract_features(features[k])
-        features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
+        # features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
 
-    max_match_distance = 2 * overlap_frac * max(bboxes.values()[-1].shape())
+    max_match_distance = 4 * overlap_frac * max(bboxes.values()[-1].shape())
 
     tilenames = sorted(bboxes.keys())
     fixed_tile = tilenames[0]
@@ -68,11 +65,15 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
 
         locs1, features1 = features[k1]
         locs2, features2 = features[k2]
+        print features1.size, k1
+        print features2.size, k2
 
-        overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + overlap_frac))
+        overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + 2 * overlap_frac))
         mask1 = overlap_bbox.contains(locs1)
         mask2 = overlap_bbox.contains(locs2)
         max_good_count = min(mask1.sum(), mask2.sum())
+
+        print "max possible", max_good_count
 
         locs1 = locs1[mask1, :]
         features1 = features1[mask1, :]
