@@ -31,7 +31,7 @@ def offset_features(features, delta_x, delta_y):
     locations[:, 1] += delta_y
     return features
 
-def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=0.25):
+def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=0.4):
     bboxes = {ts["mipmapLevels"]["0"]["imageUrl"] : BoundingBox(*ts["bbox"]) for ts in load_tilespecs(tilespec_file)}
     features = {fs["mipmapLevels"]["0"]["imageUrl"] : fs["mipmapLevels"]["0"]["featureList"] for fs in load_features(feature_file)}
     assert set(bboxes.keys()) == set(features.keys())
@@ -40,7 +40,7 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
         features[k] = extract_features(features[k])
         # features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
 
-    max_match_distance = 4 * overlap_frac * max(bboxes.values()[-1].shape())
+    max_match_distance = overlap_frac * max(bboxes.values()[-1].shape())
 
     tilenames = sorted(bboxes.keys())
     fixed_tile = tilenames[0]
@@ -63,15 +63,11 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
 
         locs1, features1 = features[k1]
         locs2, features2 = features[k2]
-        print features1.size, k1
-        print features2.size, k2
 
-        overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + 2 * overlap_frac))
+        overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + overlap_frac))
         mask1 = overlap_bbox.contains(locs1)
         mask2 = overlap_bbox.contains(locs2)
         max_good_count = min(mask1.sum(), mask2.sum())
-
-        print "max possible", max_good_count
 
         locs1 = locs1[mask1, :]
         features1 = features1[mask1, :]
