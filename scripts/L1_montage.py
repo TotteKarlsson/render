@@ -11,10 +11,8 @@ from collections import defaultdict
 import prettyplotlib as ppl
 import scipy.optimize
 
-import theano.tensor as T
-from theano import function
-from transform import Transform
-
+import L1_mosaic_derivs
+from hesfree import hessian_free
 
 def rc(filename):
     return filename.split('/')[-1][5:][:5]
@@ -54,11 +52,13 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     fixed_tile = tilenames[0]
     moving_tiles = tilenames[1:]
 
-    # set up transforms
-    transforms = {tn : Transform(name=tn, fixed=(tn == fixed_tile)) for tn in tilenames}
-    args = [arg for tn in tilenames for arg in transforms[tn].args()]
 
-    dists = []
+    # We normalize rotation angles by the edge length, to try to keep
+    # translations/rotations on approximately the same scale
+    edge_length = max(bboxes[fixed_tile].shape())
+
+
+    param_idx = {t : 3 * i for i, t in enumerate(tilenames)}
 
     tot_matches = 0
     all_good_matches = {}
@@ -86,61 +86,113 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
 
         best_k1_index = np.argmin(feature_dists, axis=0)
         best_k2_index = np.argmin(feature_dists, axis=1)
-        cur_good_matches = [(locs1[idx1, :], locs2[idx2, :])
+        cur_good_matches = [(locs1[idx1, 0], locs1[idx1, 1], locs2[idx2, 0], locs2[idx2, 1])
                             for (idx1, idx2) in enumerate(best_k2_index)
                             if (best_k1_index[idx2] == idx1) and
                             (feature_dists[idx1, idx2] < max_diff)]
 
-        if len(cur_good_matches) > 1:
+        if len(cur_good_matches) > 0:
             tot_matches += len(cur_good_matches)
-            cur_good_matches = np.array(cur_good_matches)
-            all_good_matches[k1, k2] = cur_good_matches
-            pt1 = cur_good_matches[:, 0, :]
-            pt2 = cur_good_matches[:, 1, :]
-            p1 = transforms[k1].transform(pt1)
-            p2 = transforms[k2].transform(pt2)
+            all_good_matches[k1, k2] = np.array(cur_good_matches)
 
-            curdist = T.sqrt(T.sum(T.sqr(p1 - p2), axis=1))
-            dists.append(curdist)
+    def dists(param_vec):
+        dists = []
+        for (k1, k2), matches in all_good_matches.iteritems():
+            x1, y1, x2, y2 = matches.T
 
-    dists = T.concatenate(dists)
-    err = T.sum(dists) / tot_matches
+            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
+            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
 
-    distfun = function(args, dists)
-    errfun = function(args, err)
-    errgrad = function(args, T.grad(err, args))
-    intermediates = []
+            R1 /= edge_length
+            R2 /= edge_length
+
+            nx1 = np.cos(R1) * x1 - np.sin(R1) * y1 + Tx1
+            ny1 = np.sin(R1) * x1 + np.cos(R1) * y1 + Ty1
+
+            nx2 = np.cos(R2) * x2 - np.sin(R2) * y2 + Tx2
+            ny2 = np.sin(R2) * x2 + np.cos(R2) * y2 + Ty2
+
+            D = np.sqrt((nx1 - nx2)**2 + (ny1 - ny2)**2 + 1)
+            dists.append(D)
+
+        d = np.concatenate(dists)
+        d.sort()
+        return d
+
+    def err_and_gradient(param_vec, noisy=False):
+        dists = []
+        g = np.zeros_like(param_vec)
+        for (k1, k2), matches in all_good_matches.iteritems():
+            x1, y1, x2, y2 = matches.T
+
+            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
+            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
+
+            D, dR1, dTx1, dTy1, dR2, dTx2, dTy2 = \
+                L1_mosaic_derivs.f_fprime(x1, y1, R1, Tx1, Ty1,
+                                          x2, y2, R2, Tx2, Ty2,
+                                          edge_length)
+            dists.append(D)
+            if noisy:
+                print k1, g[param_idx[k1]:][:3], (dR1, dTx1, dTy1)
+                print k2, g[param_idx[k2]:][:3], (dR2, dTx2, dTy2)
+            g[param_idx[k1]:][:3] += (dR1, dTx1, dTy1)
+            g[param_idx[k2]:][:3] += (dR2, dTx2, dTy2)
+
+        return sum(dists) / tot_matches, g / tot_matches
+
+    def err(params):
+        return err_and_gradient(params)[0]
+
+    def gradient(params):
+        return err_and_gradient(params)[1]
+
+    def Hv(param_vec, v):
+        Hv = np.zeros_like(param_vec)
+
+        for (k1, k2), matches in all_good_matches.iteritems():
+            x1, y1, x2, y2 = matches.T
+
+            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
+            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
+            vR1, vTx1, vTy1 = v[param_idx[k1]:][:3]
+            vR2, vTx2, vTy2 = v[param_idx[k2]:][:3]
+
+            dvR1, dvTx1, dvTy1, dvR2, dvTx2, dvTy2 = \
+                L1_mosaic_derivs.Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
+                                    x2, y2, R2, Tx2, Ty2, vR2, vTx2, vTy2,
+                                    edge_length)
+            Hv[param_idx[k1]:][:3] += (dvR1, dvTx1, dvTy1)
+            Hv[param_idx[k2]:][:3] += (dvR2, dvTx2, dvTy2)
+
+        return Hv / tot_matches
+
 
     def f(x):
-        result = errfun(*(x.tolist()))
-        intermediates.append((result, x))
-        return result
+        return err_and_gradient(x)[0]
+
     def g(x):
-        result = np.array(errgrad(*(x.tolist())))
-        return result
+        return err_and_gradient(x)[1]
 
     def callback(x):
+        D = dists(x)
+        print np.median(D), D.sum() / tot_matches, np.linalg.norm(g(x))
         pass
 
-    best_w_b = scipy.optimize.fmin_bfgs(f=f,
-                                        x0=np.zeros(len(args)),
-                                        fprime=g,
-                                        callback=callback,
-                                        maxiter=5000,
-                                        disp=False)
-
-
-    rot_trans = best_w_b.tolist()
-
-    print "    Median distance", np.median(distfun(*(best_w_b.tolist())))
-
+    best_params = hessian_free(f=err,
+                               x0=np.zeros(3 * len(tilenames)),
+                               fprime=gradient,
+                               fhessp=Hv,
+                               callback=callback,
+                               maxiter=100)
     result = []
     for tn in tilenames:
-        num_args = len(transforms[tn].args())
-        d = transforms[tn].args_to_dict(rot_trans[:num_args])
-        d["tile"] = tn
+        R, Tx, Ty = best_params[param_idx[tn]:][:3]
+        d = {"tile" : tn,
+             "rotation_rad" : R / edge_length,
+             "trans" : [Tx, Ty]}
         result.append(d)
-        rot_trans = rot_trans[num_args:]
+
     return result
 
 
