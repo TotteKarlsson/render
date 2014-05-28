@@ -1,14 +1,9 @@
 import sys
 import json
 from bounding_box import BoundingBox
-import pylab
 import numpy as np
 import itertools
 from scipy.spatial.distance import cdist
-from scipy.stats import norm
-from weighted_ransac import weighted_ransac
-from collections import defaultdict
-import prettyplotlib as ppl
 import scipy.optimize
 
 import L1_mosaic_derivs
@@ -41,10 +36,9 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     features = {fs["mipmapLevels"]["0"]["imageUrl"] : fs["mipmapLevels"]["0"]["featureList"] for fs in load_features(feature_file)}
     assert set(bboxes.keys()) == set(features.keys())
 
-    # XXX - needed?
     for k in bboxes:
         features[k] = extract_features(features[k])
-        features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
+        # features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
 
     max_match_distance = 2 * overlap_frac * max(bboxes.values()[-1].shape())
 
@@ -63,6 +57,7 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     tot_matches = 0
     all_good_matches = {}
 
+    print "Matches:",
     for k1, k2 in itertools.combinations(tilenames, 2):
         if not bboxes[k1].overlap(bboxes[k2]): continue
 
@@ -92,8 +87,11 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
                             (feature_dists[idx1, idx2] < max_diff)]
 
         if len(cur_good_matches) > 0:
+            print len(cur_good_matches),
             tot_matches += len(cur_good_matches)
             all_good_matches[k1, k2] = np.array(cur_good_matches)
+
+    print "   total:", tot_matches
 
     def dists(param_vec):
         dists = []
@@ -197,8 +195,10 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
 
 
 if __name__ == '__main__':
+    print "Mosaicing", sys.argv[1]
     res = compute_alignments(sys.argv[1], sys.argv[2])
     with open(sys.argv[3], "wb") as transforms:
         json.dump(res, transforms,
                   sort_keys=True,
                   indent=4)
+    print
