@@ -191,6 +191,9 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
              "trans" : [Tx, Ty]}
         result.append(d)
 
+    rots = np.array([d["rotation_rad"] for d in result])
+    print "max abs rotation", np.max(np.abs(rots - np.mean(rots)))
+
     return result
 
 
