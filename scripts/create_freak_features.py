@@ -5,6 +5,7 @@ import argparse
 import os
 import os.path
 import glob
+import traceback
 import ujson as json
 from timer import Timer
 
@@ -40,11 +41,11 @@ def compute_features(image_path, desired_count=20000):
         fast = cv2.FastFeatureDetector(threshold=threshold, nonmaxSuppression=True)
         pts = fast.detect(im)
         if (desired_count / 1.5) > len(pts):
+            threshold -= 1
             print "too few", len(pts), "moved thresh to", threshold
-            treshold -= 1
         elif len(pts) > (1.5 * desired_count):
-            print "too many", len(pts), "moved thresh to", threshold
             threshold += 1
+            print "too many", len(pts), "moved thresh to", threshold
         else:
             break
         fast.setDouble('threshold', threshold)
@@ -69,7 +70,12 @@ def compute_features_all_tiles(tile_file, out_dir):
             filename = tilespec["mipmapLevels"]["0"]["imageUrl"]
             with Timer("compute features {}".format(filename)):
                 image_path = url2path(filename)
-                feature_list = compute_features(image_path)
+                try:
+                    feature_list = compute_features(image_path)
+                except Exception:
+                    print "unable to create feature", image_path
+                    traceback.print_exc()
+                    feature_list = []
                 tile_info = {"mipmapLevels" :
                                  {"0" : {"imageUrl" : filename,
                                          "featureList": feature_list}}}
