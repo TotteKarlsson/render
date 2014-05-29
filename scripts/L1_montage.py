@@ -6,8 +6,13 @@ import itertools
 from scipy.spatial.distance import cdist
 import scipy.optimize
 
+import pyximport; pyximport.install()
+
 import L1_mosaic_derivs
 from hesfree import hessian_free
+
+from bit_dist import bit_dist
+
 
 def rc(filename):
     return filename.split('/')[-1][5:][:5]
@@ -31,16 +36,16 @@ def offset_features(features, delta_x, delta_y):
     locations[:, 1] += delta_y
     return features
 
-def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=0.4):
+def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=32):
     bboxes = {ts["mipmapLevels"]["0"]["imageUrl"] : BoundingBox(*ts["bbox"]) for ts in load_tilespecs(tilespec_file)}
     features = {fs["mipmapLevels"]["0"]["imageUrl"] : fs["mipmapLevels"]["0"]["featureList"] for fs in load_features(feature_file)}
     assert set(bboxes.keys()) == set(features.keys())
 
     for k in bboxes:
         features[k] = extract_features(features[k])
-        # features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
+        features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
 
-    max_match_distance = overlap_frac * max(bboxes.values()[-1].shape())
+    max_match_distance = 2 * overlap_frac * max(bboxes.values()[-1].shape())
 
     tilenames = sorted(bboxes.keys())
     fixed_tile = tilenames[0]
@@ -57,7 +62,7 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     tot_matches = 0
     all_good_matches = {}
 
-    print "Matches:",
+    print "Matches:"
     for k1, k2 in itertools.combinations(tilenames, 2):
         if not bboxes[k1].overlap(bboxes[k2]): continue
 
@@ -75,9 +80,11 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
         features2 = features2[mask2, :]
 
         image_dists = cdist(locs1, locs2)
-        feature_dists = cdist(features1, features2)
+        # feature_dists = cdist(features1, features2)
+        feature_dists = bit_dist(features1, features2)
 
-        feature_dists[image_dists > max_match_distance] = np.inf
+
+        feature_dists[image_dists > max_match_distance] = max_diff + 1
 
         best_k1_index = np.argmin(feature_dists, axis=0)
         best_k2_index = np.argmin(feature_dists, axis=1)
@@ -87,7 +94,7 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
                             (feature_dists[idx1, idx2] < max_diff)]
 
         if len(cur_good_matches) > 0:
-            print len(cur_good_matches),
+            print rc(k1), rc(k2), len(cur_good_matches)
             tot_matches += len(cur_good_matches)
             all_good_matches[k1, k2] = np.array(cur_good_matches)
 
@@ -184,12 +191,40 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
                                callback=callback,
                                maxiter=100)
     result = []
+
     for tn in tilenames:
         R, Tx, Ty = best_params[param_idx[tn]:][:3]
         d = {"tile" : tn,
              "rotation_rad" : R / edge_length,
              "trans" : [Tx, Ty]}
         result.append(d)
+
+    base = [r for r in result if r["tile"] == fixed_tile][0]
+    base_R = base["rotation_rad"]
+    base_Tx, base_Ty = base["trans"]
+    c = np.cos(- base_R)
+    s = np.sin(- base_R)
+    transforms = {}
+    for r in result:
+        r["rotation_rad"] -= base_R
+        tmp_x, tmp_y = r["trans"]
+        new_x = c * tmp_x - s * tmp_y - base_Tx
+        new_y = s * tmp_x + c * tmp_y - base_Ty
+        r["trans"] = new_x, new_y
+        transforms[r["tile"]] = r["rotation_rad"], new_x, new_y
+
+    if False:
+        import pylab
+        for tn in tilenames:
+            R, Tx, Ty = transforms[tn]
+            c = np.cos(R)
+            s = np.sin(R)
+            xpos = features[tn][0][:, 0]
+            ypos = features[tn][0][:, 1]
+            newx = c * xpos - s * ypos + Tx
+            newy = s * xpos + c * ypos + Ty
+            pylab.plot(newy, newx, '.')
+        pylab.show()
 
     rots = np.array([d["rotation_rad"] for d in result])
     print "max abs rotation", np.max(np.abs(rots - np.mean(rots)))
