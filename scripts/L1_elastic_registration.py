@@ -36,7 +36,9 @@ def save_transforms(file, trans):
         json.dump(trans, fp, sort_keys=True, indent=4)
 
 def extract_features(features):
-    locations = np.vstack([np.array([f["location"] for f in features])])
+    locations = np.vstack([np.array([f["location"] for f in features])]).reshape((-1, 2))
+    if locations.size == 0:
+        return Features(locations, np.empty((0, 0)))
     npfeatures = np.vstack([np.array([f["descriptor"] for f in features])])
     return Features(locations, npfeatures)
 
@@ -51,6 +53,8 @@ def load_and_transform(tilespec_file, feature_file, transform_file):
     all_features = None
     for k in bboxes:
         f = extract_features(features[k])
+        if f.size == 0:
+            continue
         f.offset(bboxes[k].from_x, bboxes[k].from_y)
         f.transform(transforms[k][0], transforms[k][1])
         if all_features:
