@@ -82,6 +82,9 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
         locs2 = locs2[mask2, :]
         features2 = features2[mask2, :]
 
+        if (locs1.size == 0) or (locs2.size == 0):
+            continue
+
         image_dists = cdist(locs1, locs2)
         # feature_dists = cdist(features1, features2)
         feature_dists = bit_dist(features1, features2)
