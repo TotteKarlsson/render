@@ -2,6 +2,9 @@ import numpy as np
 from collections import defaultdict
 from scipy.spatial.distance import cdist
 
+import pyximport; pyximport.install()
+from bit_dist import bit_dist
+
 class Features(object):
     def __init__(self, locations, features):
         self.locations = locations
@@ -36,7 +39,7 @@ class Features(object):
             for y in range(min_y, max_y + 1):
                 self.bins[x, y] = np.nonzero((quantized[:, 0] == x) & (quantized[:, 1] == y))[0]
 
-    def match(self, other, max_difference=0.3, max_match_distance=1000):
+    def match(self, other, max_difference=32, max_match_distance=1000):
         if len(set(self.bins.keys()) & set(other.bins.keys())) == 0:
             return ((self, []), (other, []))
 
@@ -47,11 +50,11 @@ class Features(object):
             features1 = F1.features[F1_indices, :]
             features2 = F2.features[F2_indices, :]
             if features1.size > 0 and features2.size > 0:
-                diffs = cdist(features1, features2)
+                diffs = bit_dist(features1, features2)
                 mins = F2_indices[np.argmin(diffs, axis=1)]
                 return mins, diffs.min(axis=1)
             else:
-                return np.zeros(features1.size, int), np.ones(features1.size) * np.inf
+                return np.zeros(features1.size, int), np.ones(features1.size) * (max_difference + 1)
 
         match_indices_1 = np.zeros(self.size, np.int)
         differences_1 = np.zeros(self.size)

@@ -6,36 +6,14 @@ import itertools
 from scipy.spatial.distance import cdist
 import scipy.optimize
 
+from L1_utils import rc, load_tilespecs, load_features, load_transforms, save_transforms, extract_features, offset_features, load_and_transform
+
 import pyximport; pyximport.install()
+from bit_dist import bit_dist
 
 import L1_mosaic_derivs
 from hesfree import hessian_free
 
-from bit_dist import bit_dist
-
-
-def rc(filename):
-    return filename.split('/')[-1][5:][:5]
-
-def load_tilespecs(file):
-    with open(file) as fp:
-        return json.load(fp)
-
-def load_features(file):
-    with open(file) as fp:
-        return json.load(fp)
-
-def extract_features(features):
-    locations = np.vstack([np.array([f["location"] for f in features])])
-    npfeatures = np.vstack([np.array([f["descriptor"] for f in features])])
-    return locations, npfeatures
-
-def offset_features(features, delta_x, delta_y):
-    locations, _ = features
-    if locations.size > 0:
-        locations[:, 0] += delta_x
-        locations[:, 1] += delta_y
-    return features
 
 def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=32):
     bboxes = {ts["mipmapLevels"]["0"]["imageUrl"] : BoundingBox(*ts["bbox"]) for ts in load_tilespecs(tilespec_file)}
@@ -88,7 +66,6 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
         image_dists = cdist(locs1, locs2)
         # feature_dists = cdist(features1, features2)
         feature_dists = bit_dist(features1, features2)
-
 
         feature_dists[image_dists > max_match_distance] = max_diff + 1
 
