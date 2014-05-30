@@ -40,6 +40,8 @@ class Features(object):
                 self.bins[x, y] = np.nonzero((quantized[:, 0] == x) & (quantized[:, 1] == y))[0]
 
     def match(self, other, max_difference=32, max_match_distance=1000):
+        self.bin(max_match_distance)
+        other.bin(max_match_distance)
         if len(set(self.bins.keys()) & set(other.bins.keys())) == 0:
             return ((self, []), (other, []))
 

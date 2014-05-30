@@ -16,6 +16,7 @@ def load_features(file):
         return json.load(fp)
 
 def load_transforms(file):
+    print "load", file
     with open(file) as fp:
         return json.load(fp)
 
