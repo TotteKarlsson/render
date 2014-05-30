@@ -72,8 +72,8 @@ if __name__ == '__main__':
     input_folder = sys.argv[1]
     overlap_fraction = 0.06  # from Alyssa's data
 
-    for sub_folder in glob.glob(os.path.join(input_folder, 'Sec*')):
+    for sub_folder in glob.glob(os.path.join(input_folder, 'W*Sec*')):
         if os.path.isdir(sub_folder):
             output_path = os.path.join(input_folder, os.path.basename(sub_folder) + '.json')
-            layer = int(sub_folder.split("Sec")[-1])
+            layer = int(sub_folder.split("Sec")[-1].split('_')[0])
             write_tilespec(sub_folder, output_path, layer)

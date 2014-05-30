@@ -32,8 +32,9 @@ def extract_features(features):
 
 def offset_features(features, delta_x, delta_y):
     locations, _ = features
-    locations[:, 0] += delta_x
-    locations[:, 1] += delta_y
+    if locations.size > 0:
+        locations[:, 0] += delta_x
+        locations[:, 1] += delta_y
     return features
 
 def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=32):
@@ -68,6 +69,8 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
 
         locs1, features1 = features[k1]
         locs2, features2 = features[k2]
+        if (locs1.size == 0) or (locs2.size == 0):
+            continue
 
         overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + overlap_frac))
         mask1 = overlap_bbox.contains(locs1)
