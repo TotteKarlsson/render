@@ -84,3 +84,30 @@ class Features(object):
         self.locations = np.vstack((self.locations, other.locations))
         self.features = np.vstack((self.features, other.features))
         self.size = self.locations.shape[0]
+
+    def bin_by_substring(self):
+        self.substring_indices = -np.ones((self.size, 32), dtype=np.int32)
+        substrings = self.features.view(dtype=np.uint16)
+        for sub_idx in range(32):
+            # store a random index in case of collisions
+            rand_idx = np.random.permutation(self.size)
+            self.substring_indices[substrings[rand_idx, sub_idx], :] = rand_idx
+
+    def closest_in_other(self, other):
+        best_match_idx = -np.ones(self.size, dtype=np.int32)
+        best_match_dist = 513 * np.ones(self.size, dtype=np.int32)
+        substrings = self.features.view(dtype=np.uint16)
+        for substring_idx in range(32):
+            other_indices = other.substring_indices[substrings[:, substring_idx]]
+            other_dists = bit_dist.bit_dist_pairwise(self.features, other.features[other_indices, :])
+            to_replace = (other_dists < best_match_dist)
+            best_match_idx[to_replace] = other_indices[to_replace]
+            best_match_dist[to_replace] = other_dists[to_replace]
+        return best_match_idx, best_match_dist
+
+    def closest_unambiguous_pairs(self, other):
+        idx_from_other, dist_1 = self.closest_in_other(other)
+        idx_from_self, dist_2 = other.closest_in_other(self)
+        self_idx = np.arange(self.size, dtype=np.int32)
+        unamibugous = (self_idx == idx_from_self[idx_from_other])
+        return self_idx[unamibugous], idx_from_other[unamibugous], dist_1[unamibugous]
