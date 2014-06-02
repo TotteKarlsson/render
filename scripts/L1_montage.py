@@ -6,7 +6,7 @@ import itertools
 from scipy.spatial.distance import cdist
 import scipy.optimize
 
-from L1_utils import rc, load_tilespecs, load_features, load_transforms, save_transforms, extract_features, offset_features, load_and_transform
+from L1_utils import rc, load_tilespecs, load_features, load_transforms, save_transforms, extract_features, load_and_transform
 
 import pyximport; pyximport.install()
 from bit_dist import bit_dist
@@ -15,16 +15,17 @@ import L1_mosaic_derivs
 from hesfree import hessian_free
 
 
-def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=32):
+def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=0.2):
     bboxes = {ts["mipmapLevels"]["0"]["imageUrl"] : BoundingBox(*ts["bbox"]) for ts in load_tilespecs(tilespec_file)}
     features = {fs["mipmapLevels"]["0"]["imageUrl"] : fs["mipmapLevels"]["0"]["featureList"] for fs in load_features(feature_file)}
     assert set(bboxes.keys()) == set(features.keys())
 
     for k in bboxes:
         features[k] = extract_features(features[k])
-        features[k] = offset_features(features[k], bboxes[k].from_x, bboxes[k].from_y)
+        #features[k].offset(bboxes[k].from_x, bboxes[k].from_y)
+        assert np.all(bboxes[k].contains(features[k].locations))
 
-    max_match_distance = 2 * overlap_frac * max(bboxes.values()[-1].shape())
+    max_match_distance = 3 * max(bboxes.values()[0].shape()) * overlap_frac
 
     tilenames = sorted(bboxes.keys())
     fixed_tile = tilenames[0]
@@ -45,32 +46,23 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
     for k1, k2 in itertools.combinations(tilenames, 2):
         if not bboxes[k1].overlap(bboxes[k2]): continue
 
-        locs1, features1 = features[k1]
-        locs2, features2 = features[k2]
-        if (locs1.size == 0) or (locs2.size == 0):
-            continue
-
-        overlap_bbox = bboxes[k1].intersect(bboxes[k2]).expand(scale=(1 + overlap_frac))
-        mask1 = overlap_bbox.contains(locs1)
-        mask2 = overlap_bbox.contains(locs2)
-        max_good_count = min(mask1.sum(), mask2.sum())
-
-        locs1 = locs1[mask1, :]
-        features1 = features1[mask1, :]
-        locs2 = locs2[mask2, :]
-        features2 = features2[mask2, :]
+        locs1 = features[k1].locations
+        features1 = features[k1].features
+        locs2 = features[k2].locations
+        features2 = features[k2].features
 
         if (locs1.size == 0) or (locs2.size == 0):
             continue
 
         image_dists = cdist(locs1, locs2)
-        # feature_dists = cdist(features1, features2)
-        feature_dists = bit_dist(features1, features2)
+        feature_dists = cdist(features1, features2)
+        # feature_dists = bit_dist(features1, features2)
 
         feature_dists[image_dists > max_match_distance] = max_diff + 1
 
         best_k1_index = np.argmin(feature_dists, axis=0)
         best_k2_index = np.argmin(feature_dists, axis=1)
+
         cur_good_matches = [(locs1[idx1, 0], locs1[idx1, 1], locs2[idx2, 0], locs2[idx2, 1])
                             for (idx1, idx2) in enumerate(best_k2_index)
                             if (best_k1_index[idx2] == idx1) and
@@ -80,6 +72,8 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
             print rc(k1), rc(k2), len(cur_good_matches)
             tot_matches += len(cur_good_matches)
             all_good_matches[k1, k2] = np.array(cur_good_matches)
+        else:
+            print "NO MATCHES", rc(k1), rc(k2)
 
     print "   total:", tot_matches
 
@@ -197,7 +191,6 @@ def compute_alignments(tilespec_file, feature_file, overlap_frac=0.06, max_diff=
         transforms[r["tile"]] = r["rotation_rad"], new_x, new_y
 
     if False:
-        import pylab
         for tn in tilenames:
             R, Tx, Ty = transforms[tn]
             c = np.cos(R)
