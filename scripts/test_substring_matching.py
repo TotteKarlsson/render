@@ -6,11 +6,9 @@ import numpy as np
 from features import Features
 import itertools
 import pylab
+from matplotlib import collections  as mc
 
 from L1_utils import load_tilespecs, load_features, load_transforms, save_transforms, extract_features, load_and_transform
-
-import pyximport; pyximport.install()
-from bit_dist import bit_dist
 
 import L1_mosaic_derivs
 from hesfree import hessian_free
@@ -40,7 +38,17 @@ if __name__ == '__main__':
     for f in features:
         f.bin_by_substring()
 
-    for f1, f2 in itertools.combinations(features):
+    for f1, f2 in itertools.combinations(features, 2):
         idx1, idx2, dists = f1.closest_unambiguous_pairs(f2)
-        pylab.hist(dists, 100)
-        pylab.show()
+        pylab.figure()
+        idx1 = idx1[dists <= 40]
+        idx2 = idx2[dists <= 40]
+        pos1 = f1.locations[idx1, :]
+        pos2 = f2.locations[idx2, :]
+        lines = [[(y1, x1), (y2, x2)] for (x1, y1), (x2, y2) in zip(pos1, pos2)]
+        print features.index(f1), features.index(f2), len(lines)
+        lc = mc.LineCollection(lines)
+        pylab.gca().add_collection(lc)
+        pylab.axis('tight')
+        pylab.title('%d %d' % (features.index(f1), features.index(f2)))
+    pylab.show()

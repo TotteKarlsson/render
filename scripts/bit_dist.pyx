@@ -17,9 +17,9 @@ cdef void _bit_dist(cnp.int64_t[:, :] a,
                count += __builtin_popcountl(a[i, k] ^ b[j, k])
            dists[i, j] = count
 
-cdef void _bit_dist(cnp.int64_t[:, :] a,
-                    cnp.int64_t[:, :] b,
-                    cnp.uint32_t[:] dists) nogil:
+cdef void _bit_dist_pairwise(cnp.int64_t[:, :] a,
+                             cnp.int64_t[:, :] b,
+                             cnp.uint32_t[:] dists) nogil:
    cdef int i, j, k, l, count
    l = a.shape[1]
 

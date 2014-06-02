@@ -3,7 +3,7 @@ from collections import defaultdict
 from scipy.spatial.distance import cdist
 
 import pyximport; pyximport.install()
-from bit_dist import bit_dist
+import bit_dist
 
 class Features(object):
     def __init__(self, locations, features):
@@ -52,7 +52,7 @@ class Features(object):
             features1 = F1.features[F1_indices, :]
             features2 = F2.features[F2_indices, :]
             if features1.size > 0 and features2.size > 0:
-                diffs = bit_dist(features1, features2)
+                diffs = bit_dist.bit_dist(features1, features2)
                 mins = F2_indices[np.argmin(diffs, axis=1)]
                 return mins, diffs.min(axis=1)
             else:
@@ -91,18 +91,22 @@ class Features(object):
         for sub_idx in range(32):
             # store a random index in case of collisions
             rand_idx = np.random.permutation(self.size)
-            self.substring_indices[substrings[rand_idx, sub_idx], :] = rand_idx
+            self.substring_indices[substrings[rand_idx, sub_idx], sub_idx] = rand_idx
 
-    def closest_in_other(self, other):
+    def closest_in_other(self, other, max_image_dist=2000):
         best_match_idx = -np.ones(self.size, dtype=np.int32)
         best_match_dist = 513 * np.ones(self.size, dtype=np.int32)
         substrings = self.features.view(dtype=np.uint16)
         for substring_idx in range(32):
-            other_indices = other.substring_indices[substrings[:, substring_idx]]
-            other_dists = bit_dist.bit_dist_pairwise(self.features, other.features[other_indices, :])
-            to_replace = (other_dists < best_match_dist)
+            other_indices = other.substring_indices[substrings[:, substring_idx], substring_idx]
+            other_bit_dists = bit_dist.bit_dist_pairwise(self.features, other.features[other_indices, :])
+            other_image_dists = np.linalg.norm(self.locations - other.locations[other_indices, :], axis=1)
+            to_replace = (other_bit_dists < best_match_dist) & (other_image_dists < max_image_dist)
+
             best_match_idx[to_replace] = other_indices[to_replace]
-            best_match_dist[to_replace] = other_dists[to_replace]
+            best_match_dist[to_replace] = other_bit_dists[to_replace]
+        short_enough = (np.linalg.norm(self.locations - other.locations[best_match_idx, :], axis=1) < max_image_dist)
+        assert np.all(short_enough | (best_match_dist == 513))
         return best_match_idx, best_match_dist
 
     def closest_unambiguous_pairs(self, other):
