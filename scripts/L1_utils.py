@@ -44,7 +44,6 @@ def load_and_transform(tilespec_file, feature_file, transform_file):
         f = extract_features(features[k])
         if f.size == 0:
             continue
-        f.offset(bboxes[k].from_x, bboxes[k].from_y)
         f.transform(transforms[k][0], transforms[k][1])
         if all_features:
             all_features.update(f)

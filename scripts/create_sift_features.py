@@ -94,7 +94,7 @@ def compute_features_all_tiles(tile_file, out_dir):
 def create_SIFT_features(tiles_dir, output_dir):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    tile_files = glob.glob(os.path.join(tiles_dir, '*.json'))
+    tile_files = sorted(glob.glob(os.path.join(tiles_dir, '*.json')))
     for tile_file in tile_files:
         compute_features_all_tiles(tile_file, output_dir)
 

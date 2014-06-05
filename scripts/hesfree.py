@@ -23,13 +23,14 @@ def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxit
         M = diags([1.0 / g**2], [0])
 
         # start with offset equivalent to previous delta
-        new_delta = stepsize * cg(A, -gradient, x0=delta, maxiter=100, M=M)[0]
+        new_delta = stepsize * cg(A, -gradient, x0=delta, maxiter=300, M=M)[0]
 
         x_new = x + new_delta
         # update lbd using Levenberg-Marquardt
         new_f = f(x_new)
         rho = (old_f - new_f) / -Bflat(new_delta)
-        if (rho < 0.25) or (new_f >= old_f): lbd = lbd * 2
+        if (rho < 0.25) or (new_f >= old_f):
+            lbd = lbd * 4
         elif rho > 0.75: lbd *= 0.5
         if PrintLambda:
             print "actual reduction", (old_f - new_f), "vs", -Bflat(new_delta), "lbd", lbd, "linear", np.sum(new_delta * gradient)
@@ -40,4 +41,9 @@ def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxit
             delta = new_delta
             if callback is not None:
                 callback(x)
+        else:
+            print new_f, ">", old_f, "   lbd:", lbd, iter, maxiter
+
+        if lbd > 1e10:
+            break
     return x
