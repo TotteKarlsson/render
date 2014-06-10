@@ -11,7 +11,7 @@ def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxit
     delta = np.zeros_like(x)
     stepsize = 0.95
     old_f = f(x0)
-    cg_iter = 200
+    cg_iter = x0.size
 
     for iter in range(maxiter):
         gradient = fprime(x)

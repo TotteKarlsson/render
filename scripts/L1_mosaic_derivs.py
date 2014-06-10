@@ -32,9 +32,9 @@ def f_fprime(x1, y1, R1, Tx1, Ty1,
     dDdTx2 =  (nx2 - nx1) / D
     dDdTy2 =  (ny2 - ny1) / D
 
-    return (D.sum(), 
-            dDdR1.sum(), dDdTx1.sum(), dDdTy1.sum(),
-            dDdR2.sum(), dDdTx2.sum(), dDdTy2.sum())
+    return (D, 
+            dDdR1, dDdTx1, dDdTy1,
+            dDdR2, dDdTx2, dDdTy2)
 
 
 def Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
@@ -109,8 +109,8 @@ def Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
     d_dDdTx2_d_e = (D * (- subexp_diff_dx) - (- subexp_diff_x) * d_D_d_e) / Dsq
     d_dDdTy2_d_e = (D * (- subexp_diff_dy) - (- subexp_diff_y) * d_D_d_e) / Dsq
 
-    return (d_dDdR1_d_e.sum(), d_dDdTx1_d_e.sum(), d_dDdTy1_d_e.sum(),
-            d_dDdR2_d_e.sum(), d_dDdTx2_d_e.sum(), d_dDdTy2_d_e.sum())
+    return (d_dDdR1_d_e, d_dDdTx1_d_e, d_dDdTy1_d_e,
+            d_dDdR2_d_e, d_dDdTx2_d_e, d_dDdTy2_d_e)
 
 
 if __name__ == '__main__':

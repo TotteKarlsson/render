@@ -25,125 +25,77 @@ from hesfree import hessian_free
 
 eps = np.finfo(np.float32).eps
 
-def weight(skip):
-    return 1.25 ** -(abs(skip) - 1)
+def weight(skip, num_matches):
+    return (1.25 ** -(abs(skip) - 1)) / num_matches
 
 
-def optimize(pairwise_matches, num_slices, edge_length,
-             block_size=75, block_step=50):
+def optimize(pairwise_matches, num_slices, edge_length):
 
-    param_idx = 3 * np.arange(num_slices, dtype=np.int)
+    # parameter vector is R, Tx, Ty for each slice.
+    # create an index into the parameter vector for each match.
+    indices_R1 = np.concatenate([3 * k1 * np.ones(matches.shape[0], dtype=np.int) for (k1, k2), matches in pairwise_matches])
+    indices_Tx1 = 1 + indices_R1
+    indices_Ty1 = 2 + indices_R1
+    indices_R2 = np.concatenate([3 * k2 * np.ones(matches.shape[0], dtype=np.int) for (k1, k2), matches in pairwise_matches])
+    indices_Tx2 = 1 + indices_R2
+    indices_Ty2 = 2 + indices_R2
 
-    # we optimize a few slices at a time, keeping the first slice fixed, then shifting forward
+    x1 = np.concatenate([matches[:, 0] for _, matches in pairwise_matches])
+    y1 = np.concatenate([matches[:, 1] for _, matches in pairwise_matches])
+    x2 = np.concatenate([matches[:, 2] for _, matches in pairwise_matches])
+    y2 = np.concatenate([matches[:, 3] for _, matches in pairwise_matches])
+    weights = np.concatenate([weight(k1 - k2, matches.shape[0]) * np.ones(matches.shape[0])
+                              for (k1, k2), matches in pairwise_matches])
 
-    # initially, only the first slice is fixed
-    solve_low = 1
-    solve_high = block_size
-
-    def solve_windowed(all_matches):
-        for (k1, k2), matches in all_matches:
-            # ignore pairs where both sides are fixed
-            if (k1 < solve_low) and (k2 < solve_low):
-                continue
-            # ignore anything even partially outside our solve window
-            if (k1 > solve_high) or (k2 > solve_high):
-                continue
-
-            yield (k1, k2), matches
+    param_len = 3 * num_slices
+    num_pairs = len(pairwise_matches)
 
     def dists(param_vec):
-        # compute the distances within the current block
+        R1, Tx1, Ty1 = [param_vec[idx] for idx in [indices_R1, indices_Tx1, indices_Ty1]]
+        R2, Tx2, Ty2 = [param_vec[idx] for idx in [indices_R2, indices_Tx2, indices_Ty2]]
+        R1 /= edge_length
+        R2 /= edge_length
 
-        dists = []
-        for (k1, k2), matches in solve_windowed(pairwise_matches):
-            x1, y1, x2, y2 = matches.T
+        c1 = np.cos(R1)
+        s1 = np.sin(R1)
+        c2 = np.cos(R2)
+        s2 = np.sin(R2)
 
-            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
-            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
+        nx1 = c1 * x1 - s1 * y1 + Tx1
+        ny1 = s1 * x1 + c1 * y1 + Ty1
 
-            R1 /= edge_length
-            R2 /= edge_length
+        nx2 = c2 * x2 - s2 * y2 + Tx2
+        ny2 = s2 * x2 + c2 * y2 + Ty2
 
-            nx1 = np.cos(R1) * x1 - np.sin(R1) * y1 + Tx1
-            ny1 = np.sin(R1) * x1 + np.cos(R1) * y1 + Ty1
+        D = np.sqrt((nx1 - nx2)**2 + (ny1 - ny2)**2 + 1)
+        return D
 
-            nx2 = np.cos(R2) * x2 - np.sin(R2) * y2 + Tx2
-            ny2 = np.sin(R2) * x2 + np.cos(R2) * y2 + Ty2
-
-            D = np.sqrt((nx1 - nx2)**2 + (ny1 - ny2)**2 + 1)
-            dists.append(D)
-
-        d = np.concatenate(dists)
-        return d
-
-    def plot(param_vec):
-        import pylab as plt
-        from matplotlib.collections import LineCollection
-
-        for (k1, k2), matches in pairwise_matches:
-            x1, y1, x2, y2 = matches.T
-
-            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
-            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
-
-            R1 /= edge_length
-            R2 /= edge_length
-
-            nx1 = np.cos(R1) * x1 - np.sin(R1) * y1 + Tx1
-            ny1 = np.sin(R1) * x1 + np.cos(R1) * y1 + Ty1
-
-            nx2 = np.cos(R2) * x2 - np.sin(R2) * y2 + Tx2
-            ny2 = np.sin(R2) * x2 + np.cos(R2) * y2 + Ty2
-
-            plt.figure()
-            segments = np.concatenate([np.dstack((ny1.reshape((-1, 1)), nx1.reshape((-1, 1)))),
-                                       np.dstack((ny2.reshape((-1, 1)), nx2.reshape((-1, 1))))],
-                                      axis=1)
-            lc = LineCollection(segments)
-            plt.gca().add_collection(lc)
-            plt.axis('tight')
-            plt.title('%d %d' % (k1, k2))
-        plt.show()
-
-
-    prev = [(-1, (-1, -1)), 0]
+    prev = [-1, 0]
     def err_and_gradient(param_vec, noisy=False):
         # cache previous evaluation
-        prev_param, prev_low_high = prev[0]
-        if np.all(param_vec == prev_param) and \
-                (solve_low, solve_high) == prev_low_high:
+        if np.all(param_vec == prev[0]):
             return prev[1]
 
-        weighted_dists = []
-        g = np.zeros_like(param_vec)
-        num_pairs = 0
-        for (k1, k2), matches in solve_windowed(pairwise_matches):
-            num_pairs += 1
-            x1, y1, x2, y2 = matches.T
+        # pull
+        R1, Tx1, Ty1 = [param_vec[idx] for idx in [indices_R1, indices_Tx1, indices_Ty1]]
+        R2, Tx2, Ty2 = [param_vec[idx] for idx in [indices_R2, indices_Tx2, indices_Ty2]]
+        D, dR1, dTx1, dTy1, dR2, dTx2, dTy2 = \
+            L1_mosaic_derivs.f_fprime(x1, y1, R1, Tx1, Ty1,
+                                      x2, y2, R2, Tx2, Ty2,
+                                      edge_length)
 
-            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
-            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
-
-            D, dR1, dTx1, dTy1, dR2, dTx2, dTy2 = \
-                L1_mosaic_derivs.f_fprime(x1, y1, R1, Tx1, Ty1,
-                                          x2, y2, R2, Tx2, Ty2,
-                                          edge_length)
-            w = weight(k1 - k2) / x1.size
-            weighted_dists.append(w * D)
-            if noisy:
-                print k1, g[param_idx[k1]:][:3], (dR1, dTx1, dTy1)
-                print k2, g[param_idx[k2]:][:3], (dR2, dTx2, dTy2)
-
-            if k1 >= solve_low:
-                g[param_idx[k1]:][:3] += (w * dR1, w * dTx1, w * dTy1)
-            if k2 >= solve_low:
-                g[param_idx[k2]:][:3] += (w * dR2, w * dTx2, w * dTy2)
-
-        wD = sum(weighted_dists) / num_pairs
+        wD = sum(D * weights) / num_pairs
+        # push
+        g = sum([np.bincount(idx, vals * weights, minlength=param_len)
+                 for idx, vals in zip([indices_R1, indices_Tx1, indices_Ty1,
+                                       indices_R2, indices_Tx2, indices_Ty2],
+                                      [dR1, dTx1, dTy1, dR2, dTx2, dTy2])])
         g /= num_pairs
 
-        prev[0] = param_vec.copy(), (solve_low, solve_high)
-        prev[1] = wD, g
+        # udpate cache
+        prev[0] = param_vec.copy()
+        prev[1] = (wD, g)
+
         return wD, g
 
     def err(params):
@@ -153,28 +105,20 @@ def optimize(pairwise_matches, num_slices, edge_length,
         return err_and_gradient(params)[1]
 
     def Hv(param_vec, v):
-        Hv = np.zeros_like(param_vec)
-
-        num_pairs = 0
-        for (k1, k2), matches in solve_windowed(pairwise_matches):
-            if (k1 < solve_low) or (k2 < solve_low):
-                continue
-            x1, y1, x2, y2 = matches.T
-            num_pairs += 1
-
-            R1, Tx1, Ty1 = param_vec[param_idx[k1]:][:3]
-            R2, Tx2, Ty2 = param_vec[param_idx[k2]:][:3]
-            vR1, vTx1, vTy1 = v[param_idx[k1]:][:3]
-            vR2, vTx2, vTy2 = v[param_idx[k2]:][:3]
-
-            dvR1, dvTx1, dvTy1, dvR2, dvTx2, dvTy2 = \
-                L1_mosaic_derivs.Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
-                                    x2, y2, R2, Tx2, Ty2, vR2, vTx2, vTy2,
-                                    edge_length)
-            w = weight(k1 - k2) / x1.size
-            Hv[param_idx[k1]:][:3] += (w * dvR1, w * dvTx1, w * dvTy1)
-            Hv[param_idx[k2]:][:3] += (w * dvR2, w * dvTx2, w * dvTy2)
-
+        # pull
+        R1, Tx1, Ty1 = [param_vec[idx] for idx in [indices_R1, indices_Tx1, indices_Ty1]]
+        R2, Tx2, Ty2 = [param_vec[idx] for idx in [indices_R2, indices_Tx2, indices_Ty2]]
+        vR1, vTx1, vTy1 = [v[idx] for idx in [indices_R1, indices_Tx1, indices_Ty1]]
+        vR2, vTx2, vTy2 = [v[idx] for idx in [indices_R2, indices_Tx2, indices_Ty2]]
+        
+        dvR1, dvTx1, dvTy1, dvR2, dvTx2, dvTy2 = L1_mosaic_derivs.Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
+                                                                     x2, y2, R2, Tx2, Ty2, vR2, vTx2, vTy2,
+                                                                     edge_length)
+        # push
+        Hv = sum([np.bincount(idx, vals * weights, minlength=param_len)
+                  for idx, vals in zip([indices_R1, indices_Tx1, indices_Ty1,
+                                        indices_R2, indices_Tx2, indices_Ty2],
+                                       [dvR1, dvTx1, dvTy1, dvR2, dvTx2, dvTy2])])
         return Hv / num_pairs
 
 
@@ -186,36 +130,22 @@ def optimize(pairwise_matches, num_slices, edge_length,
 
     def callback(x):
         D = dists(x)
-        print "block", solve_low, "to", solve_high, ":", np.percentile(D, 25), np.median(D), D.mean(), np.linalg.norm(g(x))
+        print "25/50/75", np.percentile(D, 25), np.median(D), np.percentile(D, 75), "mean", D.mean(), "F", f(x), np.linalg.norm(g(x))
         pass
 
     best_params = np.zeros(3 * num_slices)
     print "START",
     # temporarily reset limits
-    solve_low = 1
-    solve_high = num_slices - 1
-
     callback(best_params)
 
-    solve_low = 1
-    solve_high = block_size
-
-    while True:
-        best_params = hessian_free(f=err,
-                                   x0=best_params,
-                                   fprime=gradient,
-                                   fhessp=Hv,
-                                   callback=callback,
-                                   maxiter=50)
-        if (solve_high >= num_slices):
-            break
-        # update solve window
-        solve_low += block_step
-        solve_high += block_step
+    best_params = hessian_free(f=err,
+                               x0=best_params,
+                               fprime=gradient,
+                               fhessp=Hv,
+                               callback=callback,
+                               maxiter=100)
 
     print "END",
-    solve_low = 1
-    solve_high = num_slices - 1
     callback(best_params)
 
     return best_params
