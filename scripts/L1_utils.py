@@ -3,6 +3,21 @@ import numpy as np
 from bounding_box import BoundingBox
 from features import Features
 from functools import reduce
+import os
+import os.path
+
+import urllib
+try:   
+    from urlparse import urljoin
+    from urlparse import urlparse
+except ImportError:
+    from urllib.parse import urljoin
+    from urllib.parse import urlparse
+
+
+def url2path(url):
+    p = urlparse(url)
+    return os.path.join(p.netloc, p.path)
 
 def rc(filename):
     return filename.split('/')[-1][5:][:5]
@@ -16,7 +31,6 @@ def load_features(file):
         return json.load(fp)
 
 def load_transforms(file):
-    print "load", file
     with open(file) as fp:
         return json.load(fp)
 
