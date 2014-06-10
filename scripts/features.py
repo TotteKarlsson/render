@@ -40,7 +40,7 @@ class Features(object):
             for y in range(min_y, max_y + 1):
                 self.bins[x, y] = np.nonzero((quantized[:, 0] == x) & (quantized[:, 1] == y))[0]
 
-    def match(self, other, max_difference=0.5, max_match_distance=3000):
+    def match(self, other, max_difference=0.45, max_match_distance=3500):
         match_1, match_2, diffs = match_features(self.locations, self.features,
                                                  other.locations, other.features,
                                                  max_match_distance)
@@ -50,8 +50,8 @@ class Features(object):
         diffs = diffs[mask]
 
         dists = np.linalg.norm(self.locations[set1, :] - other.locations[set2, :], axis=1)
-        print "    found", mask.sum(), np.median(dists)
-        return set1, set2
+        print "    found", mask.sum(), "MED", np.median(dists), "MAD", np.median(abs(dists - np.median(dists)))
+        return set1, set2, diffs, dists
 
     def update(self, other):
         self.locations = np.vstack((self.locations, other.locations)).astype(np.float32)

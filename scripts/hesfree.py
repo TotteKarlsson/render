@@ -5,12 +5,13 @@ from scipy.optimize import fmin_cg
 
 PrintLambda = False
 
-def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxiter=100):
+def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxiter=15):
     x = x0.copy()
-    lbd = 1.0e-5 # regularization of hessian
+    lbd = 1.0e-2 # regularization of hessian
     delta = np.zeros_like(x)
     stepsize = 0.95
     old_f = f(x0)
+    cg_iter = 200
 
     for iter in range(maxiter):
         gradient = fprime(x)
@@ -23,7 +24,8 @@ def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxit
         M = diags([1.0 / g**2], [0])
 
         # start with offset equivalent to previous delta
-        new_delta = stepsize * cg(A, -gradient, x0=delta, maxiter=300, M=M)[0]
+        new_delta, status = cg(A, -gradient, x0=delta, maxiter=cg_iter, M=M)
+        new_delta *= stepsize
 
         x_new = x + new_delta
         # update lbd using Levenberg-Marquardt
@@ -42,8 +44,9 @@ def hessian_free(f=None, x0=None, fprime=None, fhessp=None, callback=None, maxit
             if callback is not None:
                 callback(x)
         else:
-            print new_f, ">", old_f, "   lbd:", lbd, iter, maxiter
+            print new_f, ">", old_f, "   lbd:", lbd, "iter", iter, "max delta", abs(delta).max()
+            delta = delta / 2.0
 
-        if lbd > 1e10:
+        if lbd > 1e5:
             break
     return x
