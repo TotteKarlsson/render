@@ -51,50 +51,63 @@ def Hv(x1, y1, R1, Tx1, Ty1, vR1, vTx1, vTy1,
     nx2 = cos(R2) * x2 - sin(R2) * y2 + Tx2
     ny2 = sin(R2) * x2 + cos(R2) * y2 + Ty2
 
-    d_nx1_d_e = vR1 * (-sin(R1) * x1 - cos(R1) * y1) + vTx1
-    d_ny1_d_e = vR1 * ( cos(R1) * x1 - sin(R1) * y1) + vTy1
-    d_nx2_d_e = vR2 * (-sin(R2) * x2 - cos(R2) * y2) + vTx2
-    d_ny2_d_e = vR2 * ( cos(R2) * x2 - sin(R2) * y2) + vTy2
+    subexp_sR1 = -sin(R1) * x1 - cos(R1) * y1
+    subexp_cR1 =  cos(R1) * x1 - sin(R1) * y1
+    subexp_sR2 = -sin(R2) * x2 - cos(R2) * y2
+    subexp_cR2 =  cos(R2) * x2 - sin(R2) * y2
 
-    Dsq = (nx1 - nx2)**2 + (ny1 - ny2)**2 + 1
+    subexp_diff_x = nx1 - nx2
+    subexp_diff_y = ny1 - ny2
+
+
+    d_nx1_d_e = vR1 * (subexp_sR1) + vTx1
+    d_ny1_d_e = vR1 * (subexp_cR1) + vTy1
+    d_nx2_d_e = vR2 * (subexp_sR2) + vTx2
+    d_ny2_d_e = vR2 * (subexp_cR2) + vTy2
+
+
+    Dsq = subexp_diff_x**2 + subexp_diff_y**2 + 1
     D = sqrt(Dsq)
-    # F = (nx1 - nx2)**2 + (ny1 - ny2)**2 + 1
+    # F = subexp_diff_x**2 + subexp_diff_y**2 + 1
     # dD_de = d(sqrt(F)) / dF * (dF / dnx1 * dnx1 / de +
     #                            dF / dny1 * dny1 / de +
     #                            dF / dnx2 * dnx2 / de +
     #                            dF / dny2 * dny2 / de)
-    d_D_d_e = (1 / 2.0) * (1 / D) * (2 * (nx1 - nx2) * d_nx1_d_e +
-                                     2 * (ny1 - ny2) * d_ny1_d_e +
-                                     2 * (nx2 - nx1) * d_nx2_d_e +
-                                     2 * (ny2 - ny1) * d_ny2_d_e)
+    d_D_d_e = (1 / 2.0) * (1 / D) * (2 * subexp_diff_x * d_nx1_d_e +
+                                     2 * subexp_diff_y * d_ny1_d_e +
+                                     2 * (- subexp_diff_x) * d_nx2_d_e +
+                                     2 * (- subexp_diff_y) * d_ny2_d_e)
 
-    dDdR1timesD = ((nx1 - nx2) * (-sin(R1) * x1 - cos(R1) * y1) +
-                   (ny1 - ny2) * ( cos(R1) * x1 - sin(R1) * y1)) / rotation_normalization
+    dDdR1timesD = (subexp_diff_x * (subexp_sR1) +
+                   subexp_diff_y * (subexp_cR1)) / rotation_normalization
 
-    dDdR2timesD = ((nx2 - nx1) * (-sin(R2) * x2 - cos(R2) * y2) +
-                   (ny2 - ny1) * ( cos(R2) * x2 - sin(R2) * y2)) / rotation_normalization
+    dDdR2timesD = ((- subexp_diff_x) * (subexp_sR2) +
+                   (- subexp_diff_y) * (subexp_cR2)) / rotation_normalization
 
     # d(dDdR * D) / de
-    d_dDdR1timesD_d_e = (((d_nx1_d_e - d_nx2_d_e) * ((-sin(R1) * x1 - cos(R1) * y1)) +
-                          (nx1 - nx2) * vR1 *        (-cos(R1) * x1 + sin(R1) * y1)) +
-                         ((d_ny1_d_e - d_ny2_d_e) * (( cos(R1) * x1 - sin(R1) * y1)) +
-                          (ny1 - ny2) * vR1 *        (-sin(R1) * x1 - cos(R1) * y1))) / rotation_normalization
+    subexp_diff_dx = d_nx1_d_e - d_nx2_d_e
+    subexp_diff_dy = d_ny1_d_e - d_ny2_d_e
 
-    d_dDdR2timesD_d_e = (((d_nx2_d_e - d_nx1_d_e) * ((-sin(R2) * x2 - cos(R2) * y2)) +
-                          (nx2 - nx1) * vR2 *        (-cos(R2) * x2 + sin(R2) * y2)) +
-                         ((d_ny2_d_e - d_ny1_d_e) * (( cos(R2) * x2 - sin(R2) * y2)) +
-                          (ny2 - ny1) * vR2 *        (-sin(R2) * x2 - cos(R2) * y2))) / rotation_normalization
+    d_dDdR1timesD_d_e = ((subexp_diff_dx * ((subexp_sR1)) -
+                          subexp_diff_x * vR1 *        (subexp_cR1)) +
+                         (subexp_diff_dy * ((subexp_cR1)) +
+                          subexp_diff_y * vR1 *        (subexp_sR1))) / rotation_normalization
+
+    d_dDdR2timesD_d_e = (((- subexp_diff_dx) * ((subexp_sR2)) -
+                          (- subexp_diff_x) * vR2 *        (subexp_cR2)) +
+                         ((- subexp_diff_dy) * ((subexp_cR2)) +
+                          (- subexp_diff_y) * vR2 *        (subexp_sR2))) / rotation_normalization
 
     # d (dDdr * D / D) / de
     d_dDdR1_d_e = (D * d_dDdR1timesD_d_e - dDdR1timesD * d_D_d_e) / Dsq
     d_dDdR2_d_e = (D * d_dDdR2timesD_d_e - dDdR2timesD * d_D_d_e) / Dsq
 
 
-    d_dDdTx1_d_e = (D * (d_nx1_d_e - d_nx2_d_e) - (nx1 - nx2) * d_D_d_e) / Dsq
-    d_dDdTy1_d_e = (D * (d_ny1_d_e - d_ny2_d_e) - (ny1 - ny2) * d_D_d_e) / Dsq
+    d_dDdTx1_d_e = (D * subexp_diff_dx - subexp_diff_x * d_D_d_e) / Dsq
+    d_dDdTy1_d_e = (D * subexp_diff_dy - subexp_diff_y * d_D_d_e) / Dsq
 
-    d_dDdTx2_d_e = (D * (d_nx2_d_e - d_nx1_d_e) - (nx2 - nx1) * d_D_d_e) / Dsq
-    d_dDdTy2_d_e = (D * (d_ny2_d_e - d_ny1_d_e) - (ny2 - ny1) * d_D_d_e) / Dsq
+    d_dDdTx2_d_e = (D * (- subexp_diff_dx) - (- subexp_diff_x) * d_D_d_e) / Dsq
+    d_dDdTy2_d_e = (D * (- subexp_diff_dy) - (- subexp_diff_y) * d_D_d_e) / Dsq
 
     return (d_dDdR1_d_e.sum(), d_dDdTx1_d_e.sum(), d_dDdTy1_d_e.sum(),
             d_dDdR2_d_e.sum(), d_dDdTx2_d_e.sum(), d_dDdTy2_d_e.sum())
