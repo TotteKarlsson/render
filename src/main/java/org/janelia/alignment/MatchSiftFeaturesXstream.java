@@ -28,6 +28,7 @@ import java.lang.StringBuilder;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.lang.reflect.Type;
 
 import mpicbg.models.PointMatch;
 import mpicbg.models.AbstractModel;
@@ -45,6 +46,7 @@ import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import mpicbg.imagefeatures.Feature;
@@ -183,12 +185,17 @@ public class MatchSiftFeaturesXstream
 
 		/* open featurespec */
 		System.out.println("reading features..");
+	  Type listType = new TypeToken<ArrayList<Feature>>() {          }.getType();
 		final List<Feature> fs1;
 		final List<Feature> fs2;
 		try
 		{
-			fs1 = (List<Feature>) loadObjectFromFile( params.featurefile1);
-			fs2 = (List<Feature>) loadObjectFromFile( params.featurefile2);
+		  final Gson gson = new Gson();
+		  fs1 = gson.fromJson( new FileReader( params.featurefile1 ), listType);
+			fs2 = gson.fromJson( new FileReader( params.featurefile2 ), listType );
+			
+			//fs1 = (List<Feature>) loadObjectFromFile( params.featurefile1);
+			//fs2 = (List<Feature>) loadObjectFromFile( params.featurefile2);
 		}
 		catch ( final Exception e )
 		{
@@ -196,6 +203,8 @@ public class MatchSiftFeaturesXstream
 			return;
 		}
 
+   
+    
     System.out.println("matching features..");
 		final List< PointMatch > candidates = new ArrayList< PointMatch >();
 		FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
@@ -223,7 +232,7 @@ public class MatchSiftFeaturesXstream
 			return;
 		}
 		
-		System.out.println("fitting model..");
+		System.out.println("fitting model ..");
 		boolean modelFound;
 		try
 		{
@@ -234,6 +243,7 @@ public class MatchSiftFeaturesXstream
 					params.maxEpsilon,
 					params.minInlierRatio,
 					params.minNumInliers );
+			System.out.println("model found with " + inliers.size() + " inliers");
 		}
 		catch ( final NotEnoughDataPointsException e )
 		{
@@ -241,8 +251,8 @@ public class MatchSiftFeaturesXstream
 			modelFound = false;
 		}
    
-      
     System.out.println("writing output..");
+    
 
    //write fit model to file if the model was found and it is good enough
     if (modelFound) {
