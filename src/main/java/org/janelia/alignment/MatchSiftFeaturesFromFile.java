@@ -47,8 +47,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
-import com.thoughtworks.xstream.XStream;
-import com.thoughtworks.xstream.io.xml.DomDriver;
+
 import mpicbg.imagefeatures.Feature;
 
 
@@ -102,34 +101,7 @@ public class MatchSiftFeaturesFromFile
 	
 	private MatchSiftFeaturesFromFile() {}
 	
-	public static Object loadObjectFromFile(String path) {
 
-    try{
-      //filename is filepath string
-      BufferedReader br = new BufferedReader(new FileReader(new File(path)));
-      String line;
-      StringBuilder sb = new StringBuilder();
-      
-      while((line=br.readLine())!= null){
-          sb.append(line);
-      }
-      String xml = sb.toString();
-		  br.close();
-		  
-	  	XStream xstream = new XStream();
-		  
-		  return xstream.fromXML(xml);
-    }
-      catch (final FileNotFoundException e){
-        e.printStackTrace();
-        return null;
-      }
-      catch (final IOException e ){
-        e.printStackTrace();
-        return null;
-      }
-
-}
 	public static boolean writeObjectToFile(Object o,String path) {
 
       //filename is filepath string
