@@ -56,7 +56,7 @@ import mpicbg.imagefeatures.Feature;
  * 
  * @author Seymour Knowles-Barley,edited by Forrest Collman
  */
-public class MatchSiftFeaturesXstream
+public class MatchSiftFeaturesFromFile
 {
 	@Parameters
 	static private class Params
@@ -82,10 +82,10 @@ public class MatchSiftFeaturesXstream
         //0=translation,1=rigid,2=similarity,3=affine
         
         @Parameter( names = "--minNumInliers", description = "Minimum number of inliers to output a model/inliers", required = false )
-        public int minNumInliers = 8;
+        public int minNumInliers = 20;
         
         @Parameter( names = "--maxEpsilon", description = "Maximum distance to consider a point an inlier after fitting transform", required = false )
-        public float maxEpsilon = 2.5f;
+        public float maxEpsilon = 1.5f;
         
         @Parameter( names = "--Niters", description = "max number of iterations for ransac", required = false )
         public int Niters = 1000;
@@ -97,10 +97,10 @@ public class MatchSiftFeaturesXstream
         public int numThreads = Runtime.getRuntime().availableProcessors();
         
         @Parameter( names = "--rod", description = "ROD", required = false )
-        public float rod = 0.92f;
+        public float rod = 0.95f;
 	}
 	
-	private MatchSiftFeaturesXstream() {}
+	private MatchSiftFeaturesFromFile() {}
 	
 	public static Object loadObjectFromFile(String path) {
 
