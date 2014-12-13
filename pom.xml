@@ -88,15 +88,26 @@
   
   <!-- NB: for project parent, in case of partial checkout -->
 	<repositories>
-		<repository>
+		<!--<repository>
 			<id>imagej.releases</id>
 			<url>http://maven.imagej.net/content/repositories/releases</url>
-		</repository>
-		<repository>
+
+		</repository>-->
+	<!--	<repository>
 			<id>imagej.snapshots</id>
 			<url>http://maven.imagej.net/content/repositories/snapshots</url>
+		</repository> -->
+		<repository>
+		  <id>imagje.public</id>
+		  <url>	http://maven.imagej.net/content/groups/public/</url>
 		</repository>
-<repository>
+		<repository>
+        <id>project.local</id>
+        <name>project</name>
+        <url>file:/home/fcollman/Stitching/repo</url>
+    </repository>
+    
+       <!-- <repository>
           <id>central</id>
           <url>https://repo1.maven.org/maven2</url>
           <releases>
@@ -105,10 +116,15 @@
           <snapshots>
             <enabled>true</enabled>
           </snapshots>
-        </repository>
+        </repository> -->
 	</repositories>
 	
   <dependencies>
+  	<dependency>
+			<groupId>sc.fiji</groupId>
+			<artifactId>legacy-imglib1</artifactId>
+			<version>1.0.0-DEPRECATED</version>
+		</dependency>
     <dependency>
       <groupId>jama</groupId>
       <artifactId>jama</artifactId>
@@ -124,6 +140,22 @@
     	<artifactId>mpicbg</artifactId>
     	<version>0.6.1</version>
     </dependency>
+       <dependency>
+    	<groupId>net.imglib2</groupId>
+      <artifactId>imglib2</artifactId>
+      <version>2.0.0</version>
+    </dependency>
+       <dependency>
+    <groupId>net.imglib2</groupId>
+<artifactId>imglib2-io</artifactId>
+    <version>2.0.0-beta-21</version>
+    </dependency>
+     <!--  <dependency> 
+ <groupId>sc.fiji</groupId>
+<artifactId>legacy-imglib1</artifactId>
+  <version>1.0.0-DEPRECATED</version>
+</dependency>-->
+   
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
@@ -140,10 +172,27 @@
     	<artifactId>TrakEM2_</artifactId>
     	<version>2.0.0-SNAPSHOT</version>
     </dependency>
+   <!--  <dependency>
+   <groupId>sc.fiji</groupId>
+<artifactId>Stitching_</artifactId>
+<version>2.0.0</version>
+    </dependency> -->
     <dependency>
+			<groupId>loci</groupId>
+			<artifactId>loci-common</artifactId>
+	<version>5.0.0-beta1</version>
+		</dependency>
+		
+   
+    <dependency>
+    	<groupId>com.ATlocal</groupId>
+    	<artifactId>stitching</artifactId>
+    	<version>2.0.3</version>
+    </dependency> 
+    <!--<dependency>
       <groupId>com.thoughtworks.xstream</groupId>
       <artifactId>xstream</artifactId>
       <version>1.4.7</version>
-    </dependency>
+    </dependency>-->
   </dependencies>
 </project>
