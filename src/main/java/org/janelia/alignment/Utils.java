@@ -47,6 +47,13 @@ import mpicbg.models.PointMatch;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 
+import java.io.Writer;
+import java.io.FileWriter;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
+
 /**
  * 
  *
@@ -476,4 +483,30 @@ public class Utils
 		a.set( ( float )scale, 0, 0, ( float )scale, t, t );
 		return a;
 	}
+	
+	public static boolean writeObjectToFile(Object o,String path) {
+
+      //filename is filepath string
+       try {
+            File file = new File(path);
+            file.getParentFile().mkdirs();
+            Writer writer = new FileWriter(file);
+            //Gson gson = new GsonBuilder().create();
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            gson.toJson(o, writer);
+            writer.close();
+        }
+        catch ( final IOException e )
+        {
+            System.err.println( "Error writing JSON file: " + path );
+            e.printStackTrace( System.err );
+        } 
+    
+        catch (final Exception e){
+            e.printStackTrace();
+            return false;
+        }
+        return true;
+
+}
 }
