@@ -62,22 +62,22 @@ import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import com.thoughtworks.xstream.XStream;
+//import com.thoughtworks.xstream.XStream;
 import java.io.ObjectInputStream;
 
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgFactory;
-import net.imglib2.img.display.imagej.ImageJFunctions;
+
 import net.imglib2.io.ImgIOException;
 import net.imglib2.io.ImgOpener;
 
 
-import mpicbg.imglib.type.numeric.real.FloatType;
-import mpicbg.imglib.type.numeric.integer.UnsignedShortType;
-import mpicbg.imglib.type.numeric.integer.UnsignedByteType;
-//import net.imglib2.type.numeric.real.FloatType;
-//import net.imglib2.type.numeric.integer.UnsignedShortType;
-//import net.imglib2.type.numeric.integer.UnsignedByteType;
+//import mpicbg.imglib.type.numeric.real.FloatType;
+//import mpicbg.imglib.type.numeric.integer.UnsignedShortType;
+//import mpicbg.imglib.type.numeric.integer.UnsignedByteType;
+import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
+import net.imglib2.type.numeric.integer.UnsignedByteType;
 
 import mpicbg.stitching.fusion.Fusion;
 
@@ -125,32 +125,7 @@ public class ReconstructImage
 	
 	}
 */
-	public static Object loadObjectFromFile(String path) {
-      try{
-          //filename is filepath string
-          BufferedReader br = new BufferedReader(new FileReader(new File(path)));
-          String line;
-          StringBuilder sb = new StringBuilder();
-          
-          while((line=br.readLine())!= null){
-              sb.append(line);
-          }
-          String xml = sb.toString();
-          br.close();
-      
-          XStream xstream = new XStream();
-          
-          return xstream.fromXML(xml);
-      }
-      catch (final FileNotFoundException e){
-          e.printStackTrace();
-          return null;
-      }
-      catch (final IOException e ){
-          e.printStackTrace();
-          return null;
-      }
-	}
+
 	
 	public static ArrayList<InvertibleBoundable> read_layout_file(String filepath)
 	{
@@ -268,20 +243,20 @@ public class ReconstructImage
       }
       
       //read in the alignment transform, and its box
-      XStream xstream = new XStream();
+      //XStream xstream = new XStream();
       
-      File file = new File(params.alignmentTransformFile);
-      try
-      {
-        BufferedReader br = new BufferedReader(new FileReader(file));
+     // File file = new File(params.alignmentTransformFile);
+    //  try
+    //  {
+    //    BufferedReader br = new BufferedReader(new FileReader(file));
     
       
-      ObjectInputStream in = xstream.createObjectInputStream(br);
+    //  ObjectInputStream in = xstream.createObjectInputStream(br);
       
-      Rectangle box = (Rectangle) in.readObject();
-      InterpolatedCoordinateTransform ct = (InterpolatedCoordinateTransform) in.readObject();
+    //  Rectangle box = (Rectangle) in.readObject();
+    //  InterpolatedCoordinateTransform ct = (InterpolatedCoordinateTransform) in.readObject();
       
-      br.close();
+    //  br.close();
       
       //compose the transforms together
       final CoordinateTransformList< CoordinateTransform > ctl = new CoordinateTransformList< CoordinateTransform >();
@@ -305,18 +280,18 @@ public class ReconstructImage
       imp.setProcessor(out_ip);
       FileSaver fs = new FileSaver( imp );
       fs.saveAsTiff(params.outputFile);
-      }
-      catch (final FileNotFoundException e){
-          e.printStackTrace();
+      //}
+      //catch (final FileNotFoundException e){
+      //    e.printStackTrace();
     
-      }
-      catch (final IOException e ){
-          e.printStackTrace();
+      //}
+      //catch (final IOException e ){
+      //    e.printStackTrace();
        
-      }
-      catch (final ClassNotFoundException e){
-        e.printStackTrace();
-      }
+      //}
+      //catch (final ClassNotFoundException e){
+    //    e.printStackTrace();
+    //  }
 	    
 	}
 }
