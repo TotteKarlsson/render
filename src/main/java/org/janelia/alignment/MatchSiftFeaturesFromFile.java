@@ -102,31 +102,7 @@ public class MatchSiftFeaturesFromFile
 	private MatchSiftFeaturesFromFile() {}
 	
 
-	public static boolean writeObjectToFile(Object o,String path) {
 
-      //filename is filepath string
-       try {
-            File file = new File(path);
-            file.getParentFile().mkdirs();
-            Writer writer = new FileWriter(file);
-            //Gson gson = new GsonBuilder().create();
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            gson.toJson(o, writer);
-            writer.close();
-        }
-        catch ( final IOException e )
-        {
-            System.err.println( "Error writing JSON file: " + path );
-            e.printStackTrace( System.err );
-        } 
-    
-        catch (final Exception e){
-            e.printStackTrace();
-            return false;
-        }
-        return true;
-
-}
 
 	public static void main( final String[] args )
 	{
@@ -226,10 +202,10 @@ public class MatchSiftFeaturesFromFile
    //write fit model to file if the model was found and it is good enough
     if (modelFound) {
       if (params.outputTransformFile != null){
-        writeObjectToFile(model,params.outputTransformFile);
+        Utils.writeObjectToFile(model,params.outputTransformFile);
       }
       if (params.outputInliersFile != null){
-        writeObjectToFile(inliers,params.outputInliersFile);
+        Utils.writeObjectToFile(inliers,params.outputInliersFile);
       }
     }
 	  
