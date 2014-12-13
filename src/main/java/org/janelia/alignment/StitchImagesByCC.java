@@ -108,10 +108,10 @@ public class StitchImagesByCC
          @Parameter( names = "--yoffsets", description = "y offsets", required = true )
         private List<Float> yoffsets;
         
-        @Parameter( names = "--layoutFile", description = "layout file for these frames", required = true )
-        private String layoutFile = null;
+        @Parameter( names = "--outputLayout", description = "path to save the layout file for these frames", required = false )
+        private String outputLayout = null;
         
-        @Parameter( names = "--outputFile", description = "Path to save image file", required = true )
+        @Parameter( names = "--outputFile", description = "Path to save image file", required = false )
         public String outputFile = null;
        
 
@@ -217,14 +217,18 @@ public class StitchImagesByCC
         models.add((InvertibleBoundable) imt.getModel());
       }  
          
-			//stitch these images
-			ImagePlus imp = Fusion.fuse(new UnsignedShortType(), images, models, 2, true, 0,null, false, false, false);
-
 			
-      FileSaver fs = new FileSaver( imp );
-      fs.saveAsTiff(params.outputFile);
+
+			 if (params.outputFile != null){
+			   //stitch these images
+  			  ImagePlus imp = Fusion.fuse(new UnsignedShortType(), images, models, 2, true, 0,null, false, false, false);
+          FileSaver fs = new FileSaver( imp );
+          fs.saveAsTiff(params.outputFile);
+			 }
+      if (params.outputLayout != null){
+        Utils.writeObjectToFile(models,params.outputLayout);
+      }
       
-   
       
 	    
 	}
