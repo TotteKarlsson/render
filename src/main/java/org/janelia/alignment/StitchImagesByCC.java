@@ -63,28 +63,26 @@ import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import com.thoughtworks.xstream.XStream;
-import java.io.ObjectInputStream;
+
 
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgFactory;
-import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.io.ImgIOException;
 import net.imglib2.io.ImgOpener;
 
 
-import mpicbg.imglib.type.numeric.real.FloatType;
-import mpicbg.imglib.type.numeric.integer.UnsignedShortType;
-import mpicbg.imglib.type.numeric.integer.UnsignedByteType;
-//import net.imglib2.type.numeric.real.FloatType;
-//import net.imglib2.type.numeric.integer.UnsignedShortType;
-//import net.imglib2.type.numeric.integer.UnsignedByteType;
+//import mpicbg.imglib.type.numeric.real.FloatType;
+//import mpicbg.imglib.type.numeric.integer.UnsignedShortType;
+//import mpicbg.imglib.type.numeric.integer.UnsignedByteType;
+import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
+import net.imglib2.type.numeric.integer.UnsignedByteType;
 
 import mpicbg.stitching.fusion.Fusion;
 import mpicbg.stitching.ImageCollectionElement;
 import mpicbg.stitching.StitchingParameters;
-import  mpicbg.stitching.ImagePlusTimePoint;
-import  mpicbg.stitching.CollectionStitchingImgLib;
+import mpicbg.stitching.ImagePlusTimePoint;
+import mpicbg.stitching.CollectionStitchingImgLib;
 
 
 /**
@@ -131,33 +129,7 @@ public class StitchImagesByCC
 	
 	}
 */
-	public static Object loadObjectFromFile(String path) {
-      try{
-          //filename is filepath string
-          BufferedReader br = new BufferedReader(new FileReader(new File(path)));
-          String line;
-          StringBuilder sb = new StringBuilder();
-          
-          while((line=br.readLine())!= null){
-              sb.append(line);
-          }
-          String xml = sb.toString();
-          br.close();
-      
-          XStream xstream = new XStream();
-          
-          return xstream.fromXML(xml);
-      }
-      catch (final FileNotFoundException e){
-          e.printStackTrace();
-          return null;
-      }
-      catch (final IOException e ){
-          e.printStackTrace();
-          return null;
-      }
-	}
-	
+
 
 	
 	public static ArrayList<ImagePlus> read_images(List<String> filepaths)
@@ -206,15 +178,14 @@ public class StitchImagesByCC
         	return;
         }
         
-	    
-	 
-	 
-	    
+
       ArrayList<ImageCollectionElement> elements=new ArrayList();
       
       for(int i = 0 ; i<params.files.size();i++){
         
-        ImageCollectionElement element=new ImageCollectionElement(new File(params.files.get(i)),i);
+        File file = new File(params.files.get(i));
+        System.out.println( file.getAbsolutePath());
+        ImageCollectionElement element=new ImageCollectionElement(file,i);
         element.setDimensionality( 2 );
         float[] offsets = {params.xoffsets.get(i),params.yoffsets.get(i)};
         element.setOffset(offsets);
@@ -233,8 +204,8 @@ public class StitchImagesByCC
         stitchparams.subpixelAccuracy = true;
         stitchparams.fusionMethod = 0;
   
-     
-    
+      
+      
       ArrayList <ImagePlusTimePoint> optimized = CollectionStitchingImgLib.stitchCollection( elements, stitchparams );
 	    
 	       //read in the images
@@ -252,6 +223,8 @@ public class StitchImagesByCC
 			
       FileSaver fs = new FileSaver( imp );
       fs.saveAsTiff(params.outputFile);
+      
+   
       
 	    
 	}
