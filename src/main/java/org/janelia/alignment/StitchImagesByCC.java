@@ -111,8 +111,8 @@ public class StitchImagesByCC
         @Parameter( names = "--outputLayout", description = "path to save the layout file for these frames", required = false )
         private String outputLayout = null;
         
-        @Parameter( names = "--outputFile", description = "Path to save image file", required = false )
-        public String outputFile = null;
+        @Parameter( names = "--outputImage", description = "Path to save image file", required = false )
+        public String outputImage = null;
        
 
 	}
@@ -219,11 +219,11 @@ public class StitchImagesByCC
          
 			
 
-			 if (params.outputFile != null){
+			 if (params.outputImage != null){
 			   //stitch these images
   			  ImagePlus imp = Fusion.fuse(new UnsignedShortType(), images, models, 2, true, 0,null, false, false, false);
           FileSaver fs = new FileSaver( imp );
-          fs.saveAsTiff(params.outputFile);
+          fs.saveAsTiff(params.outputImage);
 			 }
       if (params.outputLayout != null){
         Utils.writeObjectToFile(models,params.outputLayout);
