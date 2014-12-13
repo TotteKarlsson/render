@@ -223,6 +223,8 @@ public class StitchImagesByCC
 			   //stitch these images
   			  ImagePlus imp = Fusion.fuse(new UnsignedShortType(), images, models, 2, true, 0,null, false, false, false);
           FileSaver fs = new FileSaver( imp );
+          File file = new File(params.outputImage);
+          file.getParentFile().mkdirs();
           fs.saveAsTiff(params.outputImage);
 			 }
       if (params.outputLayout != null){
