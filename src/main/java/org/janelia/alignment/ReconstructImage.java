@@ -20,6 +20,7 @@ import ij.ImagePlus;
 import ij.process.ImageProcessor;
 import ij.IJ;
 
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -31,6 +32,7 @@ import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.lang.StringBuilder;
+import java.lang.reflect.Type;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -42,10 +44,13 @@ import java.awt.Rectangle;
 import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
 import mpicbg.ij.SIFT;
+import mpicbg.ij.InverseTransformMapping;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.InterpolatedCoordinateTransform;
 import mpicbg.models.AffineModel2D;
+import mpicbg.models.TranslationModel2D;
+import mpicbg.models.RigidModel2D;
 import mpicbg.models.InvertibleBoundable;
 
 import mpicbg.models.CoordinateTransformMesh;
@@ -62,6 +67,8 @@ import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
+
 //import com.thoughtworks.xstream.XStream;
 import java.io.ObjectInputStream;
 
@@ -103,13 +110,17 @@ public class ReconstructImage
         
         @Parameter( names = "--registrationTransformFile", description = "transform file for registration, if given", required = false )
         private String registrationTransformFile = null;
+
         
         @Parameter( names = "--alignmentTransformFile", description = "transform file for alignment file and bounding box", required = true )
         private String alignmentTransformFile = null;
         
         @Parameter( names = "--outputFile", description = "Path to save image file", required = true )
         public String outputFile = null;
-       
+        
+      @Parameter( names = "--boundBoxFile", description = "Path to save image file", required = true )
+        public String boundBoxFile = null;
+        
 
 	}
 	
@@ -207,29 +218,44 @@ public class ReconstructImage
         	return;
         }
 		
-	    
 	    //read in the layouts
-	    final ArrayList<InvertibleBoundable> models=read_layout_file(params.layoutFile);
+	    final ArrayList<TranslationModel2D> translation_models;
 	    
+	    Type listType = new TypeToken<ArrayList<TranslationModel2D>>() {}.getType();
+	    
+	    try {
+	      final Gson gson = new Gson();
+	      translation_models = gson.fromJson( new FileReader( params.layoutFile ), listType);
+	    }
+	    catch ( final Exception e )
+      {
+              e.printStackTrace( System.err );
+              return;
+      }
+	    
+	    //convert to InvertibleBoundable
+	    final ArrayList<InvertibleBoundable> models = new ArrayList();
+	    for (final TranslationModel2D trans_model:translation_models){
+	      models.add((InvertibleBoundable) trans_model);
+	    }
 	    //read in the images
 	    final ArrayList<ImagePlus> images = read_images(params.files);
 	    
 	    //make sure each image has a model
 	    assert images.size() == models.size();
-	    
-
-	    
+	   
 			//stitch these images
 			ImagePlus imp = Fusion.fuse(new UnsignedShortType(), images, models, 2, true, 0,null, false, false, false);
 
 			
-      AffineModel2D reg_model = new AffineModel2D();  	
+      RigidModel2D reg_model = new RigidModel2D();  	
 	    //read in the registration transform, if there is one
 	    if (params.registrationTransformFile != null){
+	 
           try
           {
               final Gson gson = new Gson();
-              reg_model = gson.fromJson( new FileReader( params.registrationTransformFile ), AffineModel2D.class);
+              reg_model = gson.fromJson( new FileReader( params.registrationTransformFile ), RigidModel2D.class);
           }
           catch ( final Exception e )
           {
@@ -237,15 +263,62 @@ public class ReconstructImage
               return;
           }
 	    }
-      else { //make it the identity
-        reg_model = new AffineModel2D();
-        reg_model.set(1.0f,0.0f,1.0f,0.0f,0.0f,0.0f);
-      }
-      
+     
+         
+         
+         
+         try
+          {
+              //InterpolatedCoordinateTransform ct;
+              //final Gson gson = new Gson();
+              //ct = gson.fromJson( new FileReader( params.alignmentTransformFile ), InterpolatedCoordinateTransform.class);
+              //Rectangle box = new Rectangle();
+              //box = gson.fromJson( new FileReader( params.boundBoxFile ), Rectangle.class);
+              
+              InterpolatedCoordinateTransform ct = (InterpolatedCoordinateTransform) Utils.readObjectFromFileXStream(params.alignmentTransformFile);
+              Rectangle box = (Rectangle) Utils.readObjectFromFileXStream(params.boundBoxFile);
+          
+              
+              final CoordinateTransformList< CoordinateTransform > ctl = new CoordinateTransformList< CoordinateTransform >();
+              ctl.add( reg_model );
+              ctl.add( ct );
+              
+              //setup the mapping
+              CoordinateTransformMesh mesh = new CoordinateTransformMesh(ctl, 128, box.width, box.height);
+              //CoordinateTransformMesh mesh = new CoordinateTransformMesh(ctl, 128, 4887, 2911);
+              TransformMeshMapping mapping = new TransformMeshMapping(mesh);
+              
+              //transform the file
+              ImageProcessor in_ip = imp.getProcessor();
+              in_ip.setInterpolationMethod(ImageProcessor.BILINEAR);
+              ImageProcessor out_ip=in_ip.createProcessor(box.width, box.height);
+              //ImageProcessor out_ip=in_ip.createProcessor(4887, 2911);
+              out_ip.setMinAndMax(in_ip.getMin(),in_ip.getMax());
+              
+              mapping.mapInterpolated(in_ip,out_ip);
+              
+              imp.setProcessor(out_ip);
+              FileSaver fs = new FileSaver( imp );
+              File file = new File(params.outputFile);
+              file.getParentFile().mkdirs();
+              fs.saveAsTiff(params.outputFile);
+              
+          }
+          catch ( final Exception e )
+          {
+              e.printStackTrace( System.err );
+              return;
+          }
+          
+          
+          			
+			
+
+	
       //read in the alignment transform, and its box
       //XStream xstream = new XStream();
       
-     // File file = new File(params.alignmentTransformFile);
+      //File file = new File(params.alignmentTransformFile);
     //  try
     //  {
     //    BufferedReader br = new BufferedReader(new FileReader(file));
@@ -259,27 +332,7 @@ public class ReconstructImage
     //  br.close();
       
       //compose the transforms together
-      final CoordinateTransformList< CoordinateTransform > ctl = new CoordinateTransformList< CoordinateTransform >();
-			//ctl.add( ct );
-			ctl.add( reg_model );
-			
-		  //setup the mapping
-    	//CoordinateTransformMesh mesh = new CoordinateTransformMesh(ctl, 128, box.width, box.height);
-    	CoordinateTransformMesh mesh = new CoordinateTransformMesh(ctl, 128, 4886, 2910);
-    	TransformMeshMapping mapping = new TransformMeshMapping(mesh);
-    	
-      //transform the file
-      ImageProcessor in_ip = imp.getProcessor();
-      in_ip.setInterpolationMethod(ImageProcessor.BILINEAR);
-      //ImageProcessor out_ip=in_ip.createProcessor(box.width, box.height);
-      ImageProcessor out_ip=in_ip.createProcessor(4886, 2910);
-      out_ip.setMinAndMax(in_ip.getMin(),in_ip.getMax());
-      
-      mapping.mapInterpolated(in_ip,out_ip);
-
-      imp.setProcessor(out_ip);
-      FileSaver fs = new FileSaver( imp );
-      fs.saveAsTiff(params.outputFile);
+    
       //}
       //catch (final FileNotFoundException e){
       //    e.printStackTrace();
