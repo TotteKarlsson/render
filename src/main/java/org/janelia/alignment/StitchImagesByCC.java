@@ -217,6 +217,10 @@ public class StitchImagesByCC
         models.add((InvertibleBoundable) imt.getModel());
       }  
          
+      final ArrayList<TranslationModel2D> translation_models = new ArrayList();
+      for (final InvertibleBoundable model : models){
+        translation_models.add((TranslationModel2D) model);
+      }
 			
 
 			 if (params.outputImage != null){
@@ -228,7 +232,7 @@ public class StitchImagesByCC
           fs.saveAsTiff(params.outputImage);
 			 }
       if (params.outputLayout != null){
-        Utils.writeObjectToFile(models,params.outputLayout);
+        Utils.writeObjectToFile(translation_models,params.outputLayout);
       }
       
       
