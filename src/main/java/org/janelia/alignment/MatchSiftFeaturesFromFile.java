@@ -81,10 +81,10 @@ public class MatchSiftFeaturesFromFile
         //0=translation,1=rigid,2=similarity,3=affine
         
         @Parameter( names = "--minNumInliers", description = "Minimum number of inliers to output a model/inliers", required = false )
-        public int minNumInliers = 20;
+        public int minNumInliers = 10;
         
         @Parameter( names = "--maxEpsilon", description = "Maximum distance to consider a point an inlier after fitting transform", required = false )
-        public float maxEpsilon = 1.5f;
+        public float maxEpsilon = 2.5f;
         
         @Parameter( names = "--Niters", description = "max number of iterations for ransac", required = false )
         public int Niters = 1000;
