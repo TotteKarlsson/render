@@ -20,9 +20,12 @@ import ij.ImagePlus;
 import ij.io.Opener;
 
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.awt.image.RenderedImage;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.FileNotFoundException;
 import java.net.URL;
 import java.util.ArrayList;
 
@@ -53,6 +56,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
+
+import com.thoughtworks.xstream.XStream;
+
 
 /**
  * 
@@ -483,7 +489,36 @@ public class Utils
 		a.set( ( float )scale, 0, 0, ( float )scale, t, t );
 		return a;
 	}
+
 	
+public static Object readObjectFromFileXStream(String path) {
+
+    try{
+      //filename is filepath string
+      
+      BufferedReader br = new BufferedReader(new FileReader(new File(path)));
+            String line;
+      StringBuilder sb = new StringBuilder();
+      
+      while((line=br.readLine())!= null){
+          sb.append(line);
+      }
+      String xml = sb.toString();
+		  br.close();
+		  
+	  	XStream xstream = new XStream();
+	    //System.out.println(xml);
+		  return xstream.fromXML(xml);
+    }
+      catch (final FileNotFoundException e){
+        e.printStackTrace();
+        return null;
+      }
+      catch (final IOException e ){
+        e.printStackTrace();
+        return null;
+      }
+}
 	public static boolean writeObjectToFile(Object o,String path) {
 
       //filename is filepath string
